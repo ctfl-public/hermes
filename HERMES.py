@@ -33,6 +33,7 @@ import os
 from scipy.ndimage import distance_transform_edt
 from skimage.feature import peak_local_max
 import re
+import json
 
 class UI(QMainWindow):
     def __init__(self):
@@ -234,7 +235,13 @@ class UI(QMainWindow):
         self.RunpushButton = self.findChild(QPushButton, 'RunpushButton')
         self.RunpushButton.clicked.connect(self.run_voxel2stl)
         
-        
+        # Create Save Settings Button
+        self.SaveSettingsButton = self.findChild(QPushButton, 'SaveSettingspushButton')
+        self.SaveSettingsButton.clicked.connect(self.save_settings)
+
+        # Create Load Settings Button
+        self.LoadSettingsButton = self.findChild(QPushButton, 'LoadSettingspushButton')
+        self.LoadSettingsButton.clicked.connect(self.load_settings)
         
         self.show()
         
@@ -374,6 +381,97 @@ class UI(QMainWindow):
         self.PoreDistributioncheckBox.setChecked(False)
         self.FiberAnglecheckBox.setChecked(False)
         self.FiberLengthcheckBox.setChecked(False)
+    
+    def save_settings(self):
+        options = QFileDialog.Options()
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save Settings", "", "JSON Files (*.json);;All Files (*)", options=options)
+        
+        if file_path:
+            settings = {
+                'manualInput': self.manualInput.text(),
+                'fileNameTable': self.get_table_data(self.tableWidget),
+                'cornerTable': self.get_table_data(self.CornertableWidget),
+                'TiffSavePath': self.TiffSavePathtextEdit.text(),
+                'VoxelSavePath': self.VoxelSavePathtextEdit.text(),
+                'StlSavePath': self.StlSavePathtextEdit.text(),
+                'PropertySavePath': self.PropertySavePathtextEdit.text(),
+                'PropertySaveFlags': {
+                    'MinMax': self.MinMaxcheckBox.isChecked(),
+                    'SurfArea': self.SurfAreacheckBox.isChecked(),
+                    'ClosedVolume': self.ClosedVolumecheckBox.isChecked(),
+                    'VolbyArea': self.VolbyAreacheckBox.isChecked(),
+                    'Porosity': self.PorositycheckBox.isChecked(),
+                    'FiberDiameter': self.FiberDiametercheckBox.isChecked(),
+                    'FiberLength': self.FiberLengthcheckBox.isChecked(),
+                    'FiberAngle': self.FiberAnglecheckBox.isChecked(),
+                },
+                'checkboxes': {
+                    'Laplacian': self.LaplaciancheckBox.isChecked(),
+                    'ScreenedPoisson': self.ScreenedPoissoncheckBox.isChecked(),
+                    'RemoveIslands': self.RemoveIslandscheckBox.isChecked(),
+                    'TiffSave': self.TiffSavecheckBox.isChecked(),
+                    'VoxelSave': self.VoxelSavePathcheckBox.isChecked(),
+                    'StlSave': self.StlSavePathcheckBox.isChecked(),
+                    'PropertySave': self.PropertySavecheckBox.isChecked(),
+                }
+            }
+
+            with open(file_path, 'w') as f:
+                json.dump(settings, f, indent=4)
+
+    def get_table_data(self, table):
+        data = []
+        for row in range(table.rowCount()):
+            row_data = []
+            for col in range(table.columnCount()):
+                item = table.item(row, col)
+                row_data.append(item.text() if item else "")
+            data.append(row_data)
+        return data
+    
+    def load_settings(self):
+        options = QFileDialog.Options()
+        file_path, _ = QFileDialog.getOpenFileName(self, "Load Settings", "", "JSON Files (*.json);;All Files (*)", options=options)
+        
+        if file_path:
+            with open(file_path, 'r') as f:
+                settings = json.load(f)
+
+            self.manualInput.setText(settings.get('manualInput', ''))
+            self.load_table_data(self.tableWidget, settings.get('fileNameTable', []))
+            self.load_table_data(self.CornertableWidget, settings.get('cornerTable', []))
+
+            self.TiffSavePathtextEdit.setText(settings.get('TiffSavePath', ''))
+            self.VoxelSavePathtextEdit.setText(settings.get('VoxelSavePath', ''))
+            self.StlSavePathtextEdit.setText(settings.get('StlSavePath', ''))
+            self.PropertySavePathtextEdit.setText(settings.get('PropertySavePath', ''))
+
+            self.set_checkbox_state(self.MinMaxcheckBox, settings['PropertySaveFlags'].get('MinMax', False))
+            self.set_checkbox_state(self.SurfAreacheckBox, settings['PropertySaveFlags'].get('SurfArea', False))
+            self.set_checkbox_state(self.ClosedVolumecheckBox, settings['PropertySaveFlags'].get('ClosedVolume', False))
+            self.set_checkbox_state(self.VolbyAreacheckBox, settings['PropertySaveFlags'].get('VolbyArea', False))
+            self.set_checkbox_state(self.PorositycheckBox, settings['PropertySaveFlags'].get('Porosity', False))
+            self.set_checkbox_state(self.FiberDiametercheckBox, settings['PropertySaveFlags'].get('FiberDiameter', False))
+            self.set_checkbox_state(self.FiberLengthcheckBox, settings['PropertySaveFlags'].get('FiberLength', False))
+            self.set_checkbox_state(self.FiberAnglecheckBox, settings['PropertySaveFlags'].get('FiberAngle', False))
+
+            self.set_checkbox_state(self.LaplaciancheckBox, settings['checkboxes'].get('Laplacian', False))
+            self.set_checkbox_state(self.ScreenedPoissoncheckBox, settings['checkboxes'].get('ScreenedPoisson', False))
+            self.set_checkbox_state(self.RemoveIslandscheckBox, settings['checkboxes'].get('RemoveIslands', False))
+            self.set_checkbox_state(self.TiffSavecheckBox, settings['checkboxes'].get('TiffSave', False))
+            self.set_checkbox_state(self.VoxelSavePathcheckBox, settings['checkboxes'].get('VoxelSave', False))
+            self.set_checkbox_state(self.StlSavePathcheckBox, settings['checkboxes'].get('StlSave', False))
+            self.set_checkbox_state(self.PropertySavecheckBox, settings['checkboxes'].get('PropertySave', False))
+
+    def load_table_data(self, table, data):
+        for row_data in data:
+            row_position = table.rowCount()
+            table.insertRow(row_position)
+            for col, value in enumerate(row_data):
+                table.setItem(row_position, col, QTableWidgetItem(value))
+
+    def set_checkbox_state(self, checkbox, state):
+        checkbox.setChecked(state)
     
     def run_voxel2stl(self):
         # Check if there is at least one file with voxel size in the table
@@ -693,9 +791,11 @@ def getstl(surfacename, tifvoxelsize, temp_number,volumeLength, corner, surfaceS
     # Remove Ilands
     if savingOptions['voxel_save']:
         if savingOptions['voxel_path'] != '':
-            writeChenFormat(savingOptions['voxel_path'],binary_volume,tifvoxelsize)
+            if not os.path.exists(savingOptions['voxel_path']):
+                Path(savingOptions['voxel_path']).mkdir(parents=True, exist_ok=True) 
+            writeChenFormat(os.path.join(savingOptions['voxel_path'],os.path.basename(tempName))+'.dat',binary_volume,tifvoxelsize)
         else:
-            writeChenFormat(tempName+'.dat',binary_volume,tifvoxelsize)
+            writeChenFormat(os.path.basename(tempName)+'.dat',binary_volume,tifvoxelsize)
         
     # Get vertices and faces 
     vertices, faces = getMesh(binary_volume,volumeLength,tifvoxelsize)
@@ -704,23 +804,27 @@ def getstl(surfacename, tifvoxelsize, temp_number,volumeLength, corner, surfaceS
     tempName, vertices, faces = stlSmoothing(tempName, vertices, faces, surfaceSettings)   
     
     if savingOptions['property_save']:
-        computeProperties(tempName+'.stl', vertices,faces,temp_volume,tifvoxelsize,savingOptions)
+        computeProperties(os.path.basename(tempName)+'.stl', vertices,faces,temp_volume,tifvoxelsize,savingOptions)
         
     if savingOptions['stl_save']:
         trimesh_mesh = loadMeshTrimesh(vertices,faces)
         if savingOptions['stl_path'] != '':
+            if not os.path.exists(savingOptions['stl_path']):
+                Path(savingOptions['stl_path']).mkdir(parents=True, exist_ok=True)
             # Load mesh from vertices and faces
-            trimesh_mesh.export(os.path.join(surfaceSettings['stl_path'],tempName+'.stl') , file_type="stl_ascii")
+            trimesh_mesh.export(os.path.join(savingOptions['stl_path'],os.path.basename(tempName)+'.stl') , file_type="stl_ascii")
         else:
-            trimesh_mesh.export(tempName+'.stl', file_type="stl_ascii")
+            trimesh_mesh.export(os.path.basename(tempName)+'.stl', file_type="stl_ascii")
             
     if savingOptions['tiff_save']:
         if savingOptions['tiff_path'] != '':
+            if not os.path.exists(savingOptions['tiff_path']):
+                Path(savingOptions['tiff_path']).mkdir(parents=True, exist_ok=True)
             # Save the volume as a 3D TIFF file (uncomment to double check stl)[:-4]
-            tiff.imwrite(os.path.join(surfaceSettings['tiff_path'],tempName+'.tif'), binary_volume[1:-1,1:-1,1:-1].astype(np.uint16),imagej=True)
+            tiff.imwrite(os.path.join(savingOptions['tiff_path'],os.path.basename(tempName)+'.tif'), binary_volume[1:-1,1:-1,1:-1].astype(np.uint16),imagej=True)
         else:
             # Save the volume as a 3D TIFF file (uncomment to double check stl)[:-4]
-            tiff.imwrite(tempName+'.tif', binary_volume[1:-1,1:-1,1:-1].astype(np.uint16),imagej=True)
+            tiff.imwrite(os.path.basename(tempName)+'.tif', binary_volume[1:-1,1:-1,1:-1].astype(np.uint16),imagej=True)
     
 
 def createPadding(image_volume):
@@ -927,7 +1031,7 @@ def getDiamter(image_volume,tifvoxelsize,sphereSize):
 def writeProperties(savingOptions, propertyNames, propertiesList):
     
     if savingOptions['property_path'] == '':
-        savingOptions['property_path'] = 'propertyFile.txt'
+        savingOptions['property_path'] = 'propertyFile.txt' 
     
     
     # Check if file exists to determine if we need to create a new name
