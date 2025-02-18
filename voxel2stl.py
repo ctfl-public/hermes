@@ -464,6 +464,7 @@ def run_voxel2stl():
         }
     }
     print(savingOptions)
+    
     if croppingFlag == 'Regular':
         # If both are set to 0 Full volume will be prioritize
         volumeLength = 0 # In um or enter 0 for Full volume
