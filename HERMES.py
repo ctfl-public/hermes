@@ -388,7 +388,6 @@ class UI(QMainWindow):
         
         if file_path:
             settings = {
-                'manualInput': self.manualInput.text(),
                 'fileNameTable': self.get_table_data(self.tableWidget),
                 'cornerTable': self.get_table_data(self.CornertableWidget),
                 'TiffSavePath': self.TiffSavePathtextEdit.text(),
@@ -402,18 +401,26 @@ class UI(QMainWindow):
                     'VolbyArea': self.VolbyAreacheckBox.isChecked(),
                     'Porosity': self.PorositycheckBox.isChecked(),
                     'FiberDiameter': self.FiberDiametercheckBox.isChecked(),
+                    'FiberDiamSphere': self.FiberDiamSpherelineEdit.text(),
+                    'PoreDistribution': self.PoreDistributioncheckBox.isChecked(),
+                    'PoreDistriDiamSphere': self.PoreDistSpherelineEdit.text(),
                     'FiberLength': self.FiberLengthcheckBox.isChecked(),
                     'FiberAngle': self.FiberAnglecheckBox.isChecked(),
                 },
-                'checkboxes': {
-                    'Laplacian': self.LaplaciancheckBox.isChecked(),
-                    'ScreenedPoisson': self.ScreenedPoissoncheckBox.isChecked(),
-                    'RemoveIslands': self.RemoveIslandscheckBox.isChecked(),
-                    'TiffSave': self.TiffSavecheckBox.isChecked(),
-                    'VoxelSave': self.VoxelSavePathcheckBox.isChecked(),
-                    'StlSave': self.StlSavePathcheckBox.isChecked(),
-                    'PropertySave': self.PropertySavecheckBox.isChecked(),
-                }
+                
+                'Laplacian': self.LaplaciancheckBox.isChecked(),
+                'LaplacianIter': self.LaplacianItertextEdit.text(),
+                'ScreenedPoisson': self.ScreenedPoissoncheckBox.isChecked(), 
+                'ScreenedPoissonIter': self.ScreenedPoissonItertextEdit.text(),
+                'RemoveIslands': self.RemoveIslandscheckBox.isChecked(),
+                'VoxelLength': self.VolumnLengthlineEdit.text(),
+                'VolumeLength': self.VolumnNumberlineEdit.text(),
+                'VolumeLengthCorner': self.VolumnLengthCornerlineEdit.text(),
+                'TiffSave': self.TiffSavecheckBox.isChecked(),
+                'VoxelSave': self.VoxelSavePathcheckBox.isChecked(),
+                'StlSave': self.StlSavePathcheckBox.isChecked(),
+                'PropertySave': self.PropertySavecheckBox.isChecked(),
+                
             }
 
             with open(file_path, 'w') as f:
@@ -437,7 +444,6 @@ class UI(QMainWindow):
             with open(file_path, 'r') as f:
                 settings = json.load(f)
 
-            self.manualInput.setText(settings.get('manualInput', ''))
             self.load_table_data(self.tableWidget, settings.get('fileNameTable', []))
             self.load_table_data(self.CornertableWidget, settings.get('cornerTable', []))
 
@@ -452,23 +458,37 @@ class UI(QMainWindow):
             self.set_checkbox_state(self.VolbyAreacheckBox, settings['PropertySaveFlags'].get('VolbyArea', False))
             self.set_checkbox_state(self.PorositycheckBox, settings['PropertySaveFlags'].get('Porosity', False))
             self.set_checkbox_state(self.FiberDiametercheckBox, settings['PropertySaveFlags'].get('FiberDiameter', False))
+            self.FiberDiamSpherelineEdit.setText(settings['PropertySaveFlags'].get('FiberDiamSphere', ''))
+            self.set_checkbox_state(self.PoreDistributioncheckBox, settings['PropertySaveFlags'].get('PoreDistribution', False))
+            self.PoreDistSpherelineEdit.setText(settings['PropertySaveFlags'].get('PoreDistriDiamSphere', ''))
             self.set_checkbox_state(self.FiberLengthcheckBox, settings['PropertySaveFlags'].get('FiberLength', False))
             self.set_checkbox_state(self.FiberAnglecheckBox, settings['PropertySaveFlags'].get('FiberAngle', False))
 
-            self.set_checkbox_state(self.LaplaciancheckBox, settings['checkboxes'].get('Laplacian', False))
-            self.set_checkbox_state(self.ScreenedPoissoncheckBox, settings['checkboxes'].get('ScreenedPoisson', False))
-            self.set_checkbox_state(self.RemoveIslandscheckBox, settings['checkboxes'].get('RemoveIslands', False))
-            self.set_checkbox_state(self.TiffSavecheckBox, settings['checkboxes'].get('TiffSave', False))
-            self.set_checkbox_state(self.VoxelSavePathcheckBox, settings['checkboxes'].get('VoxelSave', False))
-            self.set_checkbox_state(self.StlSavePathcheckBox, settings['checkboxes'].get('StlSave', False))
-            self.set_checkbox_state(self.PropertySavecheckBox, settings['checkboxes'].get('PropertySave', False))
+            self.set_checkbox_state(self.LaplaciancheckBox, settings.get('Laplacian', False))
+            self.LaplacianItertextEdit.setText(settings.get('LaplacianIter', ''))
+            self.set_checkbox_state(self.ScreenedPoissoncheckBox, settings.get('ScreenedPoisson', False))
+            self.ScreenedPoissonItertextEdit.setText(settings.get('ScreenedPoissonIter', ''))
+            self.set_checkbox_state(self.RemoveIslandscheckBox, settings.get('RemoveIslands', False))
+            self.VolumnLengthlineEdit.setText(settings.get('VoxelLength', ''))
+            self.VolumnNumberlineEdit.setText(settings.get('VolumeLength', ''))
+            self.VolumnLengthCornerlineEdit.setText(settings.get('VolumeLengthCorner', ''))
+            self.set_checkbox_state(self.TiffSavecheckBox, settings.get('TiffSave', False))
+            self.set_checkbox_state(self.VoxelSavePathcheckBox, settings.get('VoxelSave', False))
+            self.set_checkbox_state(self.StlSavePathcheckBox, settings.get('StlSave', False))
+            self.set_checkbox_state(self.PropertySavecheckBox, settings.get('PropertySave', False))
 
     def load_table_data(self, table, data):
+        # Clear the existing data in the table
+        table.setRowCount(0)
+        
         for row_data in data:
             row_position = table.rowCount()
             table.insertRow(row_position)
             for col, value in enumerate(row_data):
                 table.setItem(row_position, col, QTableWidgetItem(value))
+        
+        # Resize to fit the number of files
+        self.tableWidget.resizeRowsToContents()
 
     def set_checkbox_state(self, checkbox, state):
         checkbox.setChecked(state)
