@@ -1001,8 +1001,8 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
         min_extents = np.min(vertices, axis=0)
         max_extents = np.max(vertices, axis=0)
         propertyList.extend([min_extents, max_extents])
-        propertyNames.extend(["Min Extents X", "Min Extents Y", "Min Extents Z",
-                              "Max Extents X", "Max Extents Y", "Max Extents Z"])
+        propertyNames.extend(["MinExtentsX", "MinExtentsY", "MinExtentsZ",
+                              "MaxExtentsX", "MaxExtentsY", "MaxExtentsZ"])
 
     if savingOptions['property_options']['surf_area'] or savingOptions['property_options']['closed_volume'] or savingOptions['property_options']['porosity'] or savingOptions['property_options']['vol_by_area']:
         trimesh_mesh = loadMeshTrimesh(vertices, faces)
@@ -1011,16 +1011,16 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
         
     if savingOptions['property_options']['surf_area']:
         propertyList.append(mesh_surface_area)
-        propertyNames.append("Surface Area")
+        propertyNames.append("SurfaceArea")
 
     if savingOptions['property_options']['closed_volume']:
         propertyList.append(mesh_volume)
-        propertyNames.append("Closed Volume")
+        propertyNames.append("ClosedVolume")
 
     if savingOptions['property_options']['vol_by_area']:
         lengthbyarea = mesh_volume / mesh_surface_area
         propertyList.append(lengthbyarea)
-        propertyNames.append("Volume/Surface Area")
+        propertyNames.append("Volume/SurfaceArea")
 
     if savingOptions['property_options']['porosity']:
         fulltempVolume = temp_volume.shape[0] * temp_volume.shape[1] * temp_volume.shape[2] * tifvoxelsize**3
@@ -1032,30 +1032,30 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
         meanDiameter, stdDiameter = getDiamter(temp_volume, tifvoxelsize,savingOptions['property_options']['fiber_diam_sphere'])
         propertyList.append(meanDiameter)
         propertyList.append(stdDiameter)
-        propertyNames.extend(["Fiber Mean Diameter", "Fiber Diameter Std"])
+        propertyNames.extend(["fiber_diameter_Mean", "fiber_diameter_Std"])
 
     if savingOptions['property_options']['pore_distribution']:
         pore_diameter = getPoreDistribution(temp_volume, tifvoxelsize)
         propertyList.append(pore_diameter)
-        propertyNames.append("Pore Distribution")
+        propertyNames.append("poredistribution")
     
     
     if savingOptions['property_options']['FiberAngle'] or savingOptions['property_options']['FiberLength']:
         azimuthMean, elevationMean, lengthMean, azimuthSTD, elevationSTD,lengthSTD  = analyseCenterLine(temp_volume,tifvoxelsize,savingOptions['property_options']['FiberAnglePlane'])
         if savingOptions['property_options']['FiberAngle']:
             propertyList.append(azimuthMean)
-            propertyNames.append("Mean Azimuth Angle")
+            propertyNames.append("MeanAzimuthAngle")
             propertyList.append(azimuthSTD)
-            propertyNames.append("StD Azimuth Angle")
+            propertyNames.append("StDAzimuthAngle")
             propertyList.append(elevationMean)
-            propertyNames.append("Mean Elevation Angle")
+            propertyNames.append("MeanElevationAngle")
             propertyList.append(elevationSTD)
-            propertyNames.append("StD Elevation Angle")
+            propertyNames.append("StDElevationAngle")
         if savingOptions['property_options']['FiberLength']:
             propertyList.append(lengthMean)
-            propertyNames.append("Mean Length")
+            propertyNames.append("MeanLength")
             propertyList.append(lengthSTD)
-            propertyNames.append("StD Length")
+            propertyNames.append("StDLength")
         
     writeProperties(savingOptions, propertyNames, propertyList)
 
@@ -1289,11 +1289,17 @@ def writeProperties(savingOptions, propertyNames, propertiesList):
             f.write('\t'.join(propertyNames) + '\n')
             
             # Write the property values
-            f.write('\t'.join(map(str, propertiesList)) + '\n')
+            f.write('\t'.join(f"{float(x):.4f}" if (isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())) and abs(float(x)) >= 1e-4  
+                else f"{float(x):.4g}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())  
+                else str(x) for x in propertiesList) + '\n')
+
     else:
         with open(savingOptions['property_path'], '+a') as f:
             # Write the property values
-            f.write('\t'.join(map(str, propertiesList)) + '\n')
+            f.write('\t'.join(f"{float(x):.4f}" if (isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())) and abs(float(x)) >= 1e-4  
+                else f"{float(x):.4g}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())  
+                else str(x) for x in propertiesList) + '\n')
+
         
 if __name__ == "__main__":
     window()
