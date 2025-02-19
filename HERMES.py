@@ -12,7 +12,7 @@ from PyQt5 import uic
 from PyQt5.QtWidgets import ( 
     QApplication, QMainWindow, QPushButton, QLabel, QFileDialog,
     QTableWidget, QTableWidgetItem, QHeaderView,QLineEdit, QCheckBox,
-    QWidget, QMessageBox
+    QWidget, QMessageBox, QComboBox
  )
 from PyQt5.QtGui import QDoubleValidator, QIntValidator, QRegularExpressionValidator
 from PyQt5.QtCore import QRegularExpression
@@ -21,7 +21,7 @@ from pathlib import Path
 import os
 import numpy as np 
 import trimesh
-from skimage import measure
+from skimage import measure, filters, morphology
 import imageio
 import random
 import tifffile as tiff
@@ -34,6 +34,7 @@ from scipy.ndimage import distance_transform_edt
 from skimage.feature import peak_local_max
 import re
 import json
+import networkx as nx
 
 class UI(QMainWindow):
     def __init__(self):
@@ -183,7 +184,8 @@ class UI(QMainWindow):
         self.PoreDistributioncheckBox = self.findChild(QCheckBox, 'PoreDistributioncheckBox')
         self.PoreDistSpherelineEdit = self.findChild(QLineEdit, 'PoreDistSpherelineEdit')
         self.PoreDistSpherelineEdit.setValidator(float_validator)
-        self.FiberAnglecheckBox = self.findChild(QCheckBox, 'FiberAnglecheckBox')
+        self.FiberAnglecheckBox = self.findChild(QCheckBox, 'FiberAnglecheckBox') 
+        self.PlaneAnglecomboBox = self.findChild(QComboBox, 'PlaneAnglecomboBox')
         self.FiberLengthcheckBox = self.findChild(QCheckBox, 'FiberLengthcheckBox')
         
         initialStat = self.PropertySavecheckBox.isChecked()
@@ -200,6 +202,7 @@ class UI(QMainWindow):
         self.PoreDistributioncheckBox.setEnabled(initialStat)
         self.PoreDistSpherelineEdit.setEnabled(initialStat)
         self.FiberAnglecheckBox.setEnabled(initialStat)
+        self.PlaneAnglecomboBox.setEnabled(initialStat)
         self.FiberLengthcheckBox.setEnabled(initialStat)
         
         self.FiberDiamSpherelineEdit.setEnabled(self.FiberDiametercheckBox.isChecked())
@@ -209,6 +212,10 @@ class UI(QMainWindow):
         self.PoreDistSpherelineEdit.setEnabled(self.PoreDistributioncheckBox.isChecked())
         self.PoreDistributioncheckBox.stateChanged.connect(lambda: self.toggle_widgets(self.PoreDistributioncheckBox,
                                                                                    [self.PoreDistSpherelineEdit]))
+        
+        self.PlaneAnglecomboBox.setEnabled(self.FiberAnglecheckBox.isChecked())
+        self.FiberAnglecheckBox.stateChanged.connect(lambda: self.toggle_widgets(self.FiberAnglecheckBox,
+                                                                                   [self.PlaneAnglecomboBox]))
         
         # Connect the checkbox state change to a function
         self.PropertySavecheckBox.stateChanged.connect(lambda: self.toggle_widgets(self.PropertySavecheckBox,
@@ -223,7 +230,8 @@ class UI(QMainWindow):
                                                                                     self.PoreDistributioncheckBox,
                                                                                     self.PoreDistSpherelineEdit,
                                                                                     self.FiberAnglecheckBox,
-                                                                                    self.FiberLengthcheckBox])
+                                                                                    self.FiberLengthcheckBox,
+                                                                                    self.PlaneAnglecomboBox])
                                                        )
         self.SelectAllpushButton = self.findChild(QPushButton, 'SelectAllpushButton')
         self.SelectAllpushButton.clicked.connect(self.select_all_properties)
@@ -354,6 +362,8 @@ class UI(QMainWindow):
             elif checkBox == self.ScreenedPoissoncheckBox and self.ScreenedPoissoncheckBox.isChecked():
                 self.LaplaciancheckBox.setChecked(False)
                 widget.setEnabled(checkBox.isChecked())
+            elif widget == self.PlaneAnglecomboBox and checkBox.isChecked():
+                widget.setEnabled(self.FiberAnglecheckBox.isChecked())
             else:
                 # Enable or disable the widget based on the checkbox state
                 widget.setEnabled(checkBox.isChecked())
@@ -406,6 +416,7 @@ class UI(QMainWindow):
                     'PoreDistriDiamSphere': self.PoreDistSpherelineEdit.text(),
                     'FiberLength': self.FiberLengthcheckBox.isChecked(),
                     'FiberAngle': self.FiberAnglecheckBox.isChecked(),
+                    'FiberAnglePlane': self.PlaneAnglecomboBox.currentText(),
                 },
                 
                 'Laplacian': self.LaplaciancheckBox.isChecked(),
@@ -463,6 +474,7 @@ class UI(QMainWindow):
             self.PoreDistSpherelineEdit.setText(settings['PropertySaveFlags'].get('PoreDistriDiamSphere', ''))
             self.set_checkbox_state(self.FiberLengthcheckBox, settings['PropertySaveFlags'].get('FiberLength', False))
             self.set_checkbox_state(self.FiberAnglecheckBox, settings['PropertySaveFlags'].get('FiberAngle', False))
+            self.PlaneAnglecomboBox.setCurrentText(settings['PropertySaveFlags'].get('FiberAnglePlane', ''))
 
             self.set_checkbox_state(self.LaplaciancheckBox, settings.get('Laplacian', False))
             self.LaplacianItertextEdit.setText(settings.get('LaplacianIter', ''))
@@ -634,7 +646,10 @@ class UI(QMainWindow):
                 "fiber_diameter": self.FiberDiametercheckBox.isChecked(),
                 "fiber_diam_sphere": int(self.FiberDiamSpherelineEdit.text()) if self.FiberDiametercheckBox.isChecked() else None,
                 "pore_distribution": self.PoreDistributioncheckBox.isChecked(),
-                "pore_dist_sphere": int(self.PoreDistSpherelineEdit.text()) if self.PoreDistributioncheckBox.isChecked() else None
+                "pore_dist_sphere": int(self.PoreDistSpherelineEdit.text()) if self.PoreDistributioncheckBox.isChecked() else None,
+                "FiberAngle": self.FiberAnglecheckBox.isChecked(),
+                "FiberAnglePlane": self.PlaneAnglecomboBox.currentText(),
+                "FiberLength": self.FiberLengthcheckBox.isChecked(),
             }
         }
         
@@ -1023,7 +1038,25 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
         pore_diameter = getPoreDistribution(temp_volume, tifvoxelsize)
         propertyList.append(pore_diameter)
         propertyNames.append("Pore Distribution")
-
+    
+    
+    if savingOptions['property_options']['FiberAngle'] or savingOptions['property_options']['FiberLength']:
+        azimuthMean, elevationMean, lengthMean, azimuthSTD, elevationSTD,lengthSTD  = analyseCenterLine(temp_volume,tifvoxelsize,savingOptions['property_options']['FiberAnglePlane'])
+        if savingOptions['property_options']['FiberAngle']:
+            propertyList.append(azimuthMean)
+            propertyNames.append("Mean Azimuth Angle")
+            propertyList.append(azimuthSTD)
+            propertyNames.append("StD Azimuth Angle")
+            propertyList.append(elevationMean)
+            propertyNames.append("Mean Elevation Angle")
+            propertyList.append(elevationSTD)
+            propertyNames.append("StD Elevation Angle")
+        if savingOptions['property_options']['FiberLength']:
+            propertyList.append(lengthMean)
+            propertyNames.append("Mean Length")
+            propertyList.append(lengthSTD)
+            propertyNames.append("StD Length")
+        
     writeProperties(savingOptions, propertyNames, propertyList)
 
 def getDiamter(image_volume,tifvoxelsize,sphereSize):
@@ -1047,6 +1080,183 @@ def getDiamter(image_volume,tifvoxelsize,sphereSize):
     stdDiameter = np.std(fiber_diameters)
     
     return meanDiameter, stdDiameter
+
+def analyseCenterLine(image,tifvoxelsize,plane='XY'):
+    
+    # Preprocess the image
+    # Apply Gaussian filter with sigma=2
+    image_smoothed = filters.gaussian(image, sigma=1)
+    
+    # Convert to binary: 1 for values greater than the threshold, 0 otherwise
+    image_smoothed = (image_smoothed >= np.max(image_smoothed) * 0.5).astype(np.uint8)
+    
+    # Skeletonize the image
+    skeleton = morphology.skeletonize(image_smoothed)
+    
+    # tiff.imwrite(fileName[:-4]+'_skeleton.tif', skeleton.astype(np.uint16),imagej=True)
+    
+    # Extract centerline coordinates
+    coords = np.column_stack(np.where(skeleton > 0))  # Get (Z, Y, X) coordinates
+    
+    # Build graph from skeleton pixels
+    G = nx.Graph()
+    for z, y, x in coords:
+        G.add_node((z, y, x))
+    
+    # Define 26-connectivity neighbors
+    neighbors_26 = [(dz, dy, dx) for dz in [-1, 0, 1] 
+                                    for dy in [-1, 0, 1] 
+                                    for dx in [-1, 0, 1] if not (dz == dy == dx == 0)]
+    
+    # Set a **distance threshold** to avoid unwanted shortcuts
+    max_distance = np.sqrt(3)  # Maximum Euclidean distance for direct neighbors
+    
+    
+    # Connect neighboring pixels while **pruning bad connections**
+    for z, y, x in coords:
+        for dz, dy, dx in neighbors_26:
+            neighbor = (z+dz, y+dy, x+dx)
+            if neighbor in G:
+                # Compute Euclidean distance
+                distance = np.linalg.norm(np.array([z, y, x]) - np.array(neighbor))
+                if distance <= max_distance:
+                    G.add_edge((z, y, x), neighbor, weight=distance)
+    
+    # Compute the **Minimal Spanning Tree (MST)** to remove unwanted edges
+    MST = nx.minimum_spanning_tree(G)
+    
+    # Identify true branch points (nodes with degree > 2)
+    branch_points = [node for node in MST.nodes() if MST.degree(node) > 2]
+    
+    # Split centerlines at detected branch points
+    split_centerlines, graph_centerlines = split_and_order_centerlines(MST, branch_points)
+    
+    # Number of centerlines before and after split
+    num_centerlines = len(list(nx.connected_components(MST)))
+    num_split_centerlines = len(split_centerlines)
+    
+    
+    # labeled_image = assign_voxels_to_centerlines_with_kdtree(image, split_centerlines)
+    
+    # tiff.imwrite(fileName[:-4]+'test.tif', labeled_image.astype(np.uint16),imagej=True)
+    
+    # plot_centerlines_and_voxels(image, split_centerlines, labeled_image)
+    
+    # Compute angles
+    centerline_properties = calculate_centerline_properties(split_centerlines,tifvoxelsize,plane=plane)
+    
+    azimuthMean,elevationMean,lengthMean = np.mean(centerline_properties,axis=0)
+    azimuthSTD, elevationSTD,lengthSTD = np.std(centerline_properties, axis=0, ddof=0)
+    
+    return azimuthMean,elevationMean,lengthMean, azimuthSTD, elevationSTD,lengthSTD 
+
+# Function to split centerlines at branch points
+def split_and_order_centerlines(graph, branch_nodes):
+    """
+    Splits the graph's centerlines at branch points and orders the nodes in each centerline.
+
+    Parameters:
+        graph (networkx.Graph): The input graph.
+        branch_nodes (list): List of nodes where branches occur.
+
+    Returns:
+        list of lists: Ordered centerlines.
+    """
+    split_centerlines = []
+    G = graph.copy()
+    
+    # Remove branch nodes from the graph
+    G.remove_nodes_from(branch_nodes)
+
+    # Process each connected component separately
+    for component in nx.connected_components(G):
+        subgraph = G.subgraph(component)
+
+        # Find endpoints (nodes with only 1 adjacent node)
+        endpoints = [node for node in component if len(subgraph._adj[node]) == 1]
+
+        if len(endpoints) < 2:
+            # If no clear start, just keep it as is
+            split_centerlines.append(list(component))
+            continue
+
+        # Start from one of the endpoints
+        start = endpoints[0]
+        ordered_centerline = []
+        visited = set()
+
+        # Traverse from start node in order
+        node = start
+        while node is not None:
+            ordered_centerline.append(node)
+            visited.add(node)
+
+            # Move to next node
+            next_nodes = [n for n in subgraph._adj[node] if n not in visited]
+            node = next_nodes[0] if next_nodes else None  # Pick the next unvisited node
+
+        split_centerlines.append(ordered_centerline)
+
+    return split_centerlines, G
+
+def calculate_centerline_properties(split_centerlines,tifvoxelsize, plane='XY'):
+    """
+    Calculates the average azimuth and elevation angles along with length 
+    for each centerline based on ordered points. The plane parameter specifies 
+    from which plane the angles are computed.
+
+    Parameters:
+        split_centerlines (list of lists): Ordered centerlines, each a list of (x, y, z) tuples.
+        plane (str): The reference plane for azimuth and elevation calculation. 
+                     Options: 'xy', 'xz', 'yz'.
+
+    Returns:
+        list of tuples: [(avg_azimuth, avg_elevation, length) for each centerline]
+    """
+    centerline_properties = []
+
+    for centerline in split_centerlines:
+        vectors = []
+        length = 0.0
+        
+        # Compute direction vectors and segment lengths
+        for i in range(len(centerline) - 1):
+            p1 = np.array(centerline[i])  
+            p2 = np.array(centerline[i + 1])
+            vec = p2 - p1  
+            vectors.append(vec)
+            length += np.linalg.norm(vec)*tifvoxelsize  # Sum Euclidean distances
+
+        if not vectors:
+            # centerline_properties.append([None, None, 0.0])
+            continue
+
+        vectors = np.array(vectors)
+        
+        # Compute mean direction vector
+        mean_vector = np.mean(vectors, axis=0)
+        norm = np.linalg.norm(mean_vector)
+
+        if norm == 0:
+            # centerline_properties.append([None, None, length])
+            continue
+
+        # Compute azimuth and elevation based on selected plane
+        if plane == 'XY':
+            avg_azimuth = np.arctan2(mean_vector[1], mean_vector[2])  # θ (rotation in XY)
+            avg_elevation = np.arcsin(mean_vector[0] / norm)  # φ (tilt in Z)
+        elif plane == 'XZ':
+            avg_azimuth = np.arctan2(mean_vector[0], mean_vector[2])  # θ (rotation in XZ)
+            avg_elevation = np.arcsin(mean_vector[1] / norm)  # φ (tilt in Y)
+        elif plane == 'YZ':
+            avg_azimuth = np.arctan2(mean_vector[0], mean_vector[1])  # θ (rotation in YZ)
+            avg_elevation = np.arcsin(mean_vector[2] / norm)  # φ (tilt in X)
+        else:
+            raise ValueError("Invalid plane option. Choose from 'xy', 'xz', or 'yz'.")
+
+        centerline_properties.append([float(np.degrees(avg_azimuth)), float(np.degrees(avg_elevation)), float(length)])
+
+    return np.array(centerline_properties,dtype=float)
 
 def writeProperties(savingOptions, propertyNames, propertiesList):
     
