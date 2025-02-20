@@ -702,13 +702,13 @@ def run_voxel2stl():
     
     # Saving Flags 1 or 0 for True or False, respectively
     savingOptions = {
-        "tiff_save": 1,
+        "tiff_save": 0,
         "tiff_path": '', # Path where files will be saved or '' for current directory
-        "voxel_save": 1,
+        "voxel_save": 0,
         "voxel_path": '',  # Path where files will be saved or '' for current directory
         "stl_save": 1,
         "stl_path": '',  # Path where files will be saved or '' for current directory
-        "property_save": 1,
+        "property_save": 0,
         "property_path": '',  # Path where files will be saved or '' for current directory
         "property_options": {
             "min_max": 0,
@@ -716,13 +716,13 @@ def run_voxel2stl():
             "closed_volume": 0,
             "vol_by_area": 0,
             "porosity": 0,
-            "fiber_diameter": 1,
+            "fiber_diameter": 0,
             "fiber_diam_sphere": 10,
             "pore_distribution": 0,
             "pore_dist_sphere": 50,
-            "FiberAngle": 1,
+            "FiberAngle": 0,
             "FiberAnglePlane": 'YZ',
-            "FiberLength": 1,
+            "FiberLength": 0,
             
         }
     }

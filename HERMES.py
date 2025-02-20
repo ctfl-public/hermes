@@ -1151,22 +1151,81 @@ def analyseCenterLine(image,tifvoxelsize,plane='XY'):
     return azimuthMean,elevationMean,lengthMean, azimuthSTD, elevationSTD,lengthSTD 
 
 # Function to split centerlines at branch points
-def split_and_order_centerlines(graph, branch_nodes):
+def split_and_order_centerlines(graph, branch_nodes, steps=4):
     """
-    Splits the graph's centerlines at branch points and orders the nodes in each centerline.
-
+    Splits the graph's centerlines at branch points with improved handling of intersections.
+    Instead of removing the branch node itself, it looks at the connected branches and removes
+    (shifts) the voxel from the branch with the most deviated direction.
+    
     Parameters:
-        graph (networkx.Graph): The input graph.
+        graph (networkx.Graph): The input graph representing the skeleton.
         branch_nodes (list): List of nodes where branches occur.
-
+        steps (int): How many voxels along the branch to consider for adjustment (default=1).
+        
     Returns:
-        list of lists: Ordered centerlines.
+        tuple: (split_centerlines, modified_graph)
+            - split_centerlines: a list of ordered centerline node lists.
+            - modified_graph: the graph after branch adjustment.
     """
-    split_centerlines = []
+    # Work on a copy so that the original graph is not modified
     G = graph.copy()
     
-    # Remove branch nodes from the graph
-    G.remove_nodes_from(branch_nodes)
+    # For each branch node, adjust the intersection by removing the first voxel
+    # along the branch that deviates most from the others.
+    for branch in branch_nodes:
+        neighbors = list(G.neighbors(branch))
+        if len(neighbors) <= 1:
+            # Not really an intersection if only one neighbor.
+            continue
+        
+        branch_vectors = {}
+        # For each connected branch from the branch node, compute a unit direction vector.
+        for n in neighbors:
+            # If possible, follow the branch "steps" voxels ahead.
+            current = n
+            prev = branch
+            for _ in range(steps - 1):
+                # Look for a neighbor that is not the previous node.
+                next_candidates = [nbr for nbr in G.neighbors(current) if nbr != prev]
+                if next_candidates:
+                    prev = current
+                    current = next_candidates[0]
+                else:
+                    break
+            # Compute vector from branch to the voxel 'current'
+            vec = np.array(current) - np.array(branch)
+            norm = np.linalg.norm(vec)
+            if norm != 0:
+                branch_vectors[n] = vec / norm
+        
+        if len(branch_vectors) < 2:
+            # Not enough branches to compare
+            continue
+        
+        # Compute total angular difference for each branch direction
+        differences = {}
+        for n1, v1 in branch_vectors.items():
+            total_angle = 0
+            for n2, v2 in branch_vectors.items():
+                if n1 == n2:
+                    continue
+                # Compute angle difference using dot product
+                dot = np.dot(v1, v2)
+                # Clip dot to avoid numerical issues
+                dot = np.clip(dot, -1, 1)
+                angle = np.arccos(dot)
+                total_angle += angle
+            differences[n1] = total_angle
+        
+        # Identify the neighbor whose branch has the maximum total angular difference.
+        branch_to_adjust = max(differences, key=differences.get)
+        
+        # Instead of removing the branch node, remove the neighbor on the branch that is most different.
+        if branch_to_adjust in G:
+            G.remove_node(branch_to_adjust)
+    
+    # After adjusting the intersections, split the modified graph into ordered centerlines.
+    split_centerlines = []
 
     # Process each connected component separately
     for component in nx.connected_components(G):
