@@ -995,14 +995,14 @@ def remove_floating_islands_Stl(vertices,faces):
 
 def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savingOptions):
     propertyList = [stlName]
-    propertyNames = ['Stl Name']  # To store the names of selected properties
+    propertyNames = ['StlName']  # To store the names of selected properties
 
     if savingOptions['property_options']['min_max']:
         min_extents = np.min(vertices, axis=0)
         max_extents = np.max(vertices, axis=0)
         propertyList.extend([min_extents, max_extents])
-        propertyNames.extend(["Min Extents X", "Min Extents Y", "Min Extents Z",
-                              "Max Extents X", "Max Extents Y", "Max Extents Z"])
+        propertyNames.extend(["MinExtentsX", "MinExtentsY", "MinExtentsZ",
+                              "MaxExtentsX", "MaxExtentsY", "MaxExtentsZ"])
 
     if savingOptions['property_options']['surf_area'] or savingOptions['property_options']['closed_volume'] or savingOptions['property_options']['porosity'] or savingOptions['property_options']['vol_by_area']:
         trimesh_mesh = loadMeshTrimesh(vertices, faces)
@@ -1011,16 +1011,16 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
         
     if savingOptions['property_options']['surf_area']:
         propertyList.append(mesh_surface_area)
-        propertyNames.append("Surface Area")
+        propertyNames.append("SurfaceArea")
 
     if savingOptions['property_options']['closed_volume']:
         propertyList.append(mesh_volume)
-        propertyNames.append("Closed Volume")
+        propertyNames.append("ClosedVolume")
 
     if savingOptions['property_options']['vol_by_area']:
         lengthbyarea = mesh_volume / mesh_surface_area
         propertyList.append(lengthbyarea)
-        propertyNames.append("Volume/Surface Area")
+        propertyNames.append("Volume/SurfaceArea")
 
     if savingOptions['property_options']['porosity']:
         fulltempVolume = temp_volume.shape[0] * temp_volume.shape[1] * temp_volume.shape[2] * tifvoxelsize**3
@@ -1032,30 +1032,30 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
         meanDiameter, stdDiameter = getDiamter(temp_volume, tifvoxelsize,savingOptions['property_options']['fiber_diam_sphere'])
         propertyList.append(meanDiameter)
         propertyList.append(stdDiameter)
-        propertyNames.extend(["Fiber Mean Diameter", "Fiber Diameter Std"])
+        propertyNames.extend(["fiber_diameter_Mean", "fiber_diameter_Std"])
 
     if savingOptions['property_options']['pore_distribution']:
         pore_diameter = getPoreDistribution(temp_volume, tifvoxelsize)
         propertyList.append(pore_diameter)
-        propertyNames.append("Pore Distribution")
+        propertyNames.append("poredistribution")
     
     
     if savingOptions['property_options']['FiberAngle'] or savingOptions['property_options']['FiberLength']:
         azimuthMean, elevationMean, lengthMean, azimuthSTD, elevationSTD,lengthSTD  = analyseCenterLine(temp_volume,tifvoxelsize,savingOptions['property_options']['FiberAnglePlane'])
         if savingOptions['property_options']['FiberAngle']:
             propertyList.append(azimuthMean)
-            propertyNames.append("Mean Azimuth Angle")
+            propertyNames.append("MeanAzimuthAngle")
             propertyList.append(azimuthSTD)
-            propertyNames.append("StD Azimuth Angle")
+            propertyNames.append("StDAzimuthAngle")
             propertyList.append(elevationMean)
-            propertyNames.append("Mean Elevation Angle")
+            propertyNames.append("MeanElevationAngle")
             propertyList.append(elevationSTD)
-            propertyNames.append("StD Elevation Angle")
+            propertyNames.append("StDElevationAngle")
         if savingOptions['property_options']['FiberLength']:
             propertyList.append(lengthMean)
-            propertyNames.append("Mean Length")
+            propertyNames.append("MeanLength")
             propertyList.append(lengthSTD)
-            propertyNames.append("StD Length")
+            propertyNames.append("StDLength")
         
     writeProperties(savingOptions, propertyNames, propertyList)
 
@@ -1151,22 +1151,81 @@ def analyseCenterLine(image,tifvoxelsize,plane='XY'):
     return azimuthMean,elevationMean,lengthMean, azimuthSTD, elevationSTD,lengthSTD 
 
 # Function to split centerlines at branch points
-def split_and_order_centerlines(graph, branch_nodes):
+def split_and_order_centerlines(graph, branch_nodes, steps=4):
     """
-    Splits the graph's centerlines at branch points and orders the nodes in each centerline.
-
+    Splits the graph's centerlines at branch points with improved handling of intersections.
+    Instead of removing the branch node itself, it looks at the connected branches and removes
+    (shifts) the voxel from the branch with the most deviated direction.
+    
     Parameters:
-        graph (networkx.Graph): The input graph.
+        graph (networkx.Graph): The input graph representing the skeleton.
         branch_nodes (list): List of nodes where branches occur.
-
+        steps (int): How many voxels along the branch to consider for adjustment (default=1).
+        
     Returns:
-        list of lists: Ordered centerlines.
+        tuple: (split_centerlines, modified_graph)
+            - split_centerlines: a list of ordered centerline node lists.
+            - modified_graph: the graph after branch adjustment.
     """
-    split_centerlines = []
+    # Work on a copy so that the original graph is not modified
     G = graph.copy()
     
-    # Remove branch nodes from the graph
-    G.remove_nodes_from(branch_nodes)
+    # For each branch node, adjust the intersection by removing the first voxel
+    # along the branch that deviates most from the others.
+    for branch in branch_nodes:
+        neighbors = list(G.neighbors(branch))
+        if len(neighbors) <= 1:
+            # Not really an intersection if only one neighbor.
+            continue
+        
+        branch_vectors = {}
+        # For each connected branch from the branch node, compute a unit direction vector.
+        for n in neighbors:
+            # If possible, follow the branch "steps" voxels ahead.
+            current = n
+            prev = branch
+            for _ in range(steps - 1):
+                # Look for a neighbor that is not the previous node.
+                next_candidates = [nbr for nbr in G.neighbors(current) if nbr != prev]
+                if next_candidates:
+                    prev = current
+                    current = next_candidates[0]
+                else:
+                    break
+            # Compute vector from branch to the voxel 'current'
+            vec = np.array(current) - np.array(branch)
+            norm = np.linalg.norm(vec)
+            if norm != 0:
+                branch_vectors[n] = vec / norm
+        
+        if len(branch_vectors) < 2:
+            # Not enough branches to compare
+            continue
+        
+        # Compute total angular difference for each branch direction
+        differences = {}
+        for n1, v1 in branch_vectors.items():
+            total_angle = 0
+            for n2, v2 in branch_vectors.items():
+                if n1 == n2:
+                    continue
+                # Compute angle difference using dot product
+                dot = np.dot(v1, v2)
+                # Clip dot to avoid numerical issues
+                dot = np.clip(dot, -1, 1)
+                angle = np.arccos(dot)
+                total_angle += angle
+            differences[n1] = total_angle
+        
+        # Identify the neighbor whose branch has the maximum total angular difference.
+        branch_to_adjust = max(differences, key=differences.get)
+        
+        # Instead of removing the branch node, remove the neighbor on the branch that is most different.
+        if branch_to_adjust in G:
+            G.remove_node(branch_to_adjust)
+    
+    # After adjusting the intersections, split the modified graph into ordered centerlines.
+    split_centerlines = []
 
     # Process each connected component separately
     for component in nx.connected_components(G):
@@ -1289,11 +1348,17 @@ def writeProperties(savingOptions, propertyNames, propertiesList):
             f.write('\t'.join(propertyNames) + '\n')
             
             # Write the property values
-            f.write('\t'.join(map(str, propertiesList)) + '\n')
+            f.write('\t'.join(f"{float(x):.4f}" if (isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())) and abs(float(x)) >= 1e-4  
+                else f"{float(x):.4g}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())  
+                else str(x) for x in propertiesList) + '\n')
+
     else:
         with open(savingOptions['property_path'], '+a') as f:
             # Write the property values
-            f.write('\t'.join(map(str, propertiesList)) + '\n')
+            f.write('\t'.join(f"{float(x):.4f}" if (isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())) and abs(float(x)) >= 1e-4  
+                else f"{float(x):.4g}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())  
+                else str(x) for x in propertiesList) + '\n')
+
         
 if __name__ == "__main__":
     window()
