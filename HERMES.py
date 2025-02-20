@@ -995,7 +995,7 @@ def remove_floating_islands_Stl(vertices,faces):
 
 def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savingOptions):
     propertyList = [stlName]
-    propertyNames = ['Stl Name']  # To store the names of selected properties
+    propertyNames = ['StlName']  # To store the names of selected properties
 
     if savingOptions['property_options']['min_max']:
         min_extents = np.min(vertices, axis=0)
