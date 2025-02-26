@@ -9,6 +9,7 @@
 
 
 from PyQt5 import uic
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import ( 
     QApplication, QMainWindow, QPushButton, QLabel, QFileDialog,
     QTableWidget, QTableWidgetItem, QHeaderView,QLineEdit, QCheckBox,
@@ -694,6 +695,9 @@ class UI(QMainWindow):
 
 def window():
     app = QApplication(sys.argv)
+    app.setAttribute(Qt.AA_EnableHighDpiScaling) # Enable High DPI Scaling 
+    app.setAttribute(Qt.AA_UseHighDpiPixmaps)
+    app.setStyle("Fusion")
     ui = UI()
     ui.show()
     sys.exit(app.exec_())
