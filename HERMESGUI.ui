@@ -55,6 +55,9 @@
        </item>
        <item>
         <widget class="QLineEdit" name="FileNamelineEdit">
+         <property name="toolTip">
+          <string>Enter the name of the file if in the same directory or the path to the file if the file is in another directory.</string>
+         </property>
          <property name="text">
           <string/>
          </property>
@@ -208,6 +211,9 @@
          <property name="tabletTracking">
           <bool>false</bool>
          </property>
+         <property name="toolTip">
+          <string>Applies Laplacian filter to STL.</string>
+         </property>
          <property name="text">
           <string>Laplacian</string>
          </property>
@@ -217,6 +223,9 @@
         <widget class="QLineEdit" name="LaplacianItertextEdit">
          <property name="enabled">
           <bool>true</bool>
+         </property>
+         <property name="toolTip">
+          <string>Number of iteration to perform Laplacian filter.</string>
          </property>
          <property name="text">
           <string>1</string>
@@ -241,6 +250,9 @@
          <property name="tabletTracking">
           <bool>false</bool>
          </property>
+         <property name="toolTip">
+          <string>Applies Screened Poisson remeshing to STL.</string>
+         </property>
          <property name="text">
           <string>Screened Poisson</string>
          </property>
@@ -250,6 +262,9 @@
         <widget class="QLineEdit" name="ScreenedPoissonItertextEdit">
          <property name="enabled">
           <bool>true</bool>
+         </property>
+         <property name="toolTip">
+          <string>Depth of Screened Poisson remeshing.</string>
          </property>
          <property name="text">
           <string>8</string>
@@ -271,6 +286,9 @@
        </item>
        <item>
         <widget class="QCheckBox" name="RemoveIslandscheckBox">
+         <property name="toolTip">
+          <string>Remove all floating islands, leaving only the single component with higher volume.</string>
+         </property>
          <property name="text">
           <string>Remove Islands</string>
          </property>
@@ -334,7 +352,7 @@
             </rect>
            </property>
            <property name="text">
-            <string>Volumn Length (um)</string>
+            <string>Volumn Length (µm)</string>
            </property>
           </widget>
           <widget class="QLineEdit" name="VolumnLengthlineEdit">
@@ -345,6 +363,9 @@
              <width>101</width>
              <height>20</height>
             </rect>
+           </property>
+           <property name="toolTip">
+            <string>Enter the volume length in um</string>
            </property>
            <property name="text">
             <string/>
@@ -388,6 +409,9 @@
              <height>20</height>
             </rect>
            </property>
+           <property name="toolTip">
+            <string>Enter the number of volumes to be generated</string>
+           </property>
            <property name="text">
             <string/>
            </property>
@@ -400,7 +424,7 @@
             <rect>
              <x>230</x>
              <y>30</y>
-             <width>81</width>
+             <width>91</width>
              <height>16</height>
             </rect>
            </property>
@@ -806,6 +830,9 @@
           </property>
           <item row="0" column="2">
            <widget class="QCheckBox" name="SurfAreacheckBox">
+            <property name="toolTip">
+             <string>Surface area in µm&lt;sup&gt;2&lt;/sup&gt;.</string>
+            </property>
             <property name="text">
              <string>Surface Area</string>
             </property>
@@ -813,6 +840,9 @@
           </item>
           <item row="0" column="0">
            <widget class="QCheckBox" name="MinMaxcheckBox">
+            <property name="toolTip">
+             <string>Min and max coordinates of STL in µm.</string>
+            </property>
             <property name="text">
              <string>Min/Max Extend</string>
             </property>
@@ -820,6 +850,9 @@
           </item>
           <item row="0" column="8">
            <widget class="QCheckBox" name="PorositycheckBox">
+            <property name="toolTip">
+             <string>Void volume divided by total volume.</string>
+            </property>
             <property name="text">
              <string>Porosity</string>
             </property>
@@ -834,13 +867,19 @@
           </item>
           <item row="1" column="6">
            <widget class="QLineEdit" name="PoreDistSpherelineEdit">
+            <property name="toolTip">
+             <string>Size of sphere to capture the local maximums to extract pore distribution in µm.</string>
+            </property>
             <property name="placeholderText">
-             <string>Sphere size (um)</string>
+             <string>Sphere size (µm)</string>
             </property>
            </widget>
           </item>
           <item row="0" column="4">
            <widget class="QCheckBox" name="ClosedVolumecheckBox">
+            <property name="toolTip">
+             <string>Surface area in µm&lt;sup&gt;3&lt;/sup&gt;.</string>
+            </property>
             <property name="text">
              <string>Closed Volume</string>
             </property>
@@ -848,6 +887,9 @@
           </item>
           <item row="0" column="6">
            <widget class="QCheckBox" name="VolbyAreacheckBox">
+            <property name="toolTip">
+             <string>Volume by area in µm.</string>
+            </property>
             <property name="text">
              <string>Volume by Area</string>
             </property>
@@ -888,8 +930,11 @@
           </item>
           <item row="1" column="2">
            <widget class="QLineEdit" name="FiberDiamSpherelineEdit">
+            <property name="toolTip">
+             <string>Size of sphere to capture the local maximums to extract fiber diameters in µm.</string>
+            </property>
             <property name="placeholderText">
-             <string>Sphere size (um)</string>
+             <string>Sphere size (µm)</string>
             </property>
            </widget>
           </item>
@@ -921,6 +966,9 @@
           </item>
           <item row="2" column="0">
            <widget class="QCheckBox" name="FiberAnglecheckBox">
+            <property name="toolTip">
+             <string>Azimuth and elevation angles in degrees.</string>
+            </property>
             <property name="text">
              <string>Fiber Angle</string>
             </property>
@@ -928,6 +976,9 @@
           </item>
           <item row="1" column="8">
            <widget class="QCheckBox" name="FiberLengthcheckBox">
+            <property name="toolTip">
+             <string>Fiber length in µm.</string>
+            </property>
             <property name="text">
              <string>Fiber Lengths</string>
             </property>
@@ -935,6 +986,9 @@
           </item>
           <item row="2" column="2">
            <widget class="QComboBox" name="PlaneAnglecomboBox">
+            <property name="toolTip">
+             <string>Plane to calculate the azimuth and elevation angles with respect to.</string>
+            </property>
             <property name="editable">
              <bool>false</bool>
             </property>
