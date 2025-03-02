@@ -13,10 +13,12 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import ( 
     QApplication, QMainWindow, QPushButton, QLabel, QFileDialog,
     QTableWidget, QTableWidgetItem, QHeaderView,QLineEdit, QCheckBox,
-    QWidget, QMessageBox, QComboBox
+    QWidget, QMessageBox, QComboBox, QSlider, QGraphicsView, QGraphicsScene,
+    QVBoxLayout, QSizePolicy
  )
 from PyQt5.QtGui import QDoubleValidator, QIntValidator, QRegularExpressionValidator
-from PyQt5.QtCore import QRegularExpression
+from PyQt5.QtCore import QRegularExpression, QThread, pyqtSignal
+from PyQt5.QtGui import QImage, QPixmap
 import sys
 from pathlib import Path
 import os
@@ -33,9 +35,45 @@ import multiprocessing
 import os
 from scipy.ndimage import distance_transform_edt
 from skimage.feature import peak_local_max
+from skimage.filters import (threshold_otsu, threshold_local, threshold_li, 
+                             threshold_yen, threshold_isodata, threshold_triangle)
 import re
 import json
 import networkx as nx
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+import matplotlib.pyplot as plt
+
+class SegmentationThread(QThread):
+    finished = pyqtSignal(np.ndarray)
+
+    def __init__(self, image_data, method):
+        super().__init__()
+        self.image_data = image_data
+        self.method = method
+
+    def run(self):
+        segmentation_mask = np.zeros_like(self.image_data, dtype=bool)
+        if self.method == "Otsu":
+            threshold = threshold_otsu(self.image_data)
+            segmentation_mask = self.image_data > threshold
+        elif self.method == "Adaptive":
+            block_size = 35
+            local_thresh = threshold_local(self.image_data, block_size, offset=10)
+            segmentation_mask = self.image_data > local_thresh
+        elif self.method == "Li":
+            threshold = threshold_li(self.image_data)
+            segmentation_mask = self.image_data > threshold
+        elif self.method == "Yen":
+            threshold = threshold_yen(self.image_data)
+            segmentation_mask = self.image_data > threshold
+        elif self.method == "Isodata":
+            threshold = threshold_isodata(self.image_data)
+            segmentation_mask = self.image_data > threshold
+        elif self.method == "Triangle":
+            threshold = threshold_triangle(self.image_data)
+            segmentation_mask = self.image_data > threshold
+        self.finished.emit(segmentation_mask)
+
 
 class UI(QMainWindow):
     def __init__(self):
@@ -252,6 +290,77 @@ class UI(QMainWindow):
         self.LoadSettingsButton = self.findChild(QPushButton, 'LoadSettingspushButton')
         self.LoadSettingsButton.clicked.connect(self.load_settings)
         
+        self.image_data = None
+        self.segmentation_mask = None
+        self.current_slice = 0
+        self.current_plane = "XY"
+        
+        # Load TIFF to segment
+        self.load_button = self.findChild(QPushButton, 'LoadTiffSegmentationpushButton')
+        self.load_button.clicked.connect(self.load_tiff)
+        
+        self.file_labelSegmentation = self.findChild(QLabel, 'fileNameSegmentationlabel')
+        
+        self.slider = self.findChild(QSlider, 'CurrentPlanehorizontalSlider')
+        self.slider.setMinimum(0)
+        self.slider.valueChanged.connect(self.update_slice)
+        
+        self.slice_label = self.findChild(QLabel, 'currentPlanelabel')
+        
+        self.figure, self.ax = plt.subplots()
+        self.canvas = FigureCanvas(self.figure)
+        
+        # Ensure canvas resizes dynamically
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.canvas.updateGeometry()
+    
+        self.graphics_view = self.findChild(QGraphicsView, 'TiffViewgraphicsView')
+
+        # Add Matplotlib canvas to the UI
+        layout = QVBoxLayout(self.graphics_view)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.canvas)
+        self.graphics_view.setLayout(layout)
+        
+        # Update histogram view
+        self.update_histogram()
+    
+        self.plane_selector = self.findChild(QComboBox, 'GreyviewPlanecomboBox')
+        self.plane_selector.currentTextChanged.connect(self.change_plane)
+        
+        # Create a new Matplotlib figure and canvas for the histogram
+        self.hist_figure, self.hist_ax = plt.subplots()
+        self.hist_canvas = FigureCanvas(self.hist_figure)
+    
+        # Ensure dynamic resizing
+        self.hist_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.hist_canvas.updateGeometry()
+    
+        # Find the QGraphicsView in Qt Designer
+        self.hist_view = self.findChild(QGraphicsView, 'GreyscaleHistogramgraphicsView')
+    
+        # Add the Matplotlib canvas to the UI
+        hist_layout = QVBoxLayout(self.hist_view)
+        hist_layout.setContentsMargins(0, 0, 0, 0)
+        hist_layout.addWidget(self.hist_canvas)
+        self.hist_view.setLayout(hist_layout)
+        
+        # Find buttons by object name from the UI file
+        self.btnOtsu = self.findChild(QPushButton, "OtsupushButton")
+        self.btnAdaptive = self.findChild(QPushButton, "AdaptivepushButton")
+        self.btnLi = self.findChild(QPushButton, "LipushButton")
+        self.btnYen = self.findChild(QPushButton, "YenpushButton")
+        self.btnIsodata = self.findChild(QPushButton, "IsodatapushButton")
+        self.btnTriangle = self.findChild(QPushButton, "TrianglepushButton")
+    
+        # Connect buttons to the segmentation function
+        self.btnOtsu.clicked.connect(lambda: self.run_segmentation("Otsu"))
+        self.btnAdaptive.clicked.connect(lambda: self.run_segmentation("Adaptive"))
+        self.btnLi.clicked.connect(lambda: self.run_segmentation("Li"))
+        self.btnYen.clicked.connect(lambda: self.run_segmentation("Yen"))
+        self.btnIsodata.clicked.connect(lambda: self.run_segmentation("Isodata"))
+        self.btnTriangle.clicked.connect(lambda: self.run_segmentation("Triangle"))
+    
         self.show()
         
     def open_file_dialog(self):
@@ -505,6 +614,111 @@ class UI(QMainWindow):
 
     def set_checkbox_state(self, checkbox, state):
         checkbox.setChecked(state)
+    
+    def load_tiff(self):
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open TIFF", "", "TIFF Files (*.tif *.tiff)")
+        if file_path:
+            self.image_data = tiff.imread(file_path)
+            self.segmentation_mask = np.zeros_like(self.image_data, dtype=bool)
+            self.slider.setMaximum(self.image_data.shape[0] - 1)
+            self.current_slice = 0
+            self.update_view()
+            
+            # Extract the filename from the full path and update the label
+            file_name = os.path.basename(file_path)
+            self.file_labelSegmentation.setText(f"Loaded: {file_name}")
+            self.slice_label.setText(f"Slice: {self.current_slice+1}")
+
+    def change_plane(self, plane):
+        self.current_plane = plane
+        self.slider.setMaximum(self.image_data.shape[0] - 1 if plane == "XY" else self.image_data.shape[1] - 1)
+        self.update_view()
+
+    def update_slice(self, value):
+        self.current_slice = value
+        self.slice_label.setText(f"Slice: {self.current_slice+1}")
+        self.update_view()
+
+    def get_slice(self):
+        if self.current_plane == "XY":
+            return self.image_data[self.current_slice, :, :], self.segmentation_mask[self.current_slice, :, :]
+        elif self.current_plane == "XZ":
+            return self.image_data[:, self.current_slice, :], self.segmentation_mask[:, self.current_slice, :]
+        else:
+            return self.image_data[:, :, self.current_slice], self.segmentation_mask[:, :, self.current_slice]
+
+    def update_view(self):
+        if self.image_data is None:
+            return
+    
+        raw_slice, seg_slice = self.get_slice()
+    
+        # Clear the figure and remove extra whitespace
+        self.ax.clear()
+        self.figure.subplots_adjust(left=0.2, right=.95, top=.97, bottom=0.18)  # Fit image tightly
+    
+        # Show raw image with correct aspect ratio
+        self.ax.imshow(raw_slice, cmap="gray", )
+    
+        # Create an RGBA version of seg_slice where False values are fully transparent
+        overlay = np.zeros((*seg_slice.shape, 4))  # Initialize an RGBA image (H, W, 4)
+        overlay[..., 2] = 1.0  # Set blue channel to 1.0 (Blues colormap)
+        overlay[..., 3] = seg_slice.astype(float) * 0.5  # Alpha (transparency), scaled by 0.5
+    
+        # Overlay segmentation mask with transparency
+        self.ax.imshow(overlay)
+    
+        # Set axis labels and remove ticks
+        self.ax.set_xlabel("X-axis", labelpad=10)
+        self.ax.set_ylabel("Y-axis")
+        
+        # self.ax.set_xticks([])  # Hide x ticks
+        # self.ax.set_yticks([])  # Hide y ticks
+        
+        self.figure.tight_layout()
+        
+        # Refresh the canvas
+        self.canvas.draw()
+        self.update_histogram()
+
+    def run_segmentation(self, method):
+        if self.image_data is None:
+            return
+        self.thread = SegmentationThread(self.image_data, method)
+        self.thread.finished.connect(self.on_segmentation_done)
+        self.thread.start()
+
+    def on_segmentation_done(self, segmentation_mask):
+        self.segmentation_mask = segmentation_mask
+        self.update_view()
+        
+    def update_histogram(self):
+        """Compute and display the grayscale histogram of the current slice."""
+        if self.image_data is None:
+            return
+    
+    
+        # Clear previous histogram
+        self.hist_ax.clear()
+        
+        self.hist_figure.subplots_adjust(left=0, right=1, top=1, bottom=0)
+        
+        # Compute histogram (256 bins for grayscale values)
+        self.hist_ax.hist(self. image_data.ravel(), bins=256, range=(0, 255), color='black')
+    
+        # Set labels
+        # self.hist_ax.set_xlabel("Pixel Int.")
+        # self.hist_ax.set_ylabel("Freq.")
+    
+        # Remove unnecessary grid/ticks
+        self.hist_ax.set_xticks(np.linspace(0, 255, num=4))  # Tick marks at 0, 50, 100, ...
+        self.hist_ax.set_yticks([])  # Hide Y ticks for a cleaner look
+        
+        self.hist_figure.tight_layout()
+        
+        
+        # Refresh canvas
+        self.hist_canvas.draw()
     
     def run_voxel2stl(self):
         # Check if there is at least one file with voxel size in the table
