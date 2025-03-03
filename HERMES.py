@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QLabel, QFileDialog,
     QTableWidget, QTableWidgetItem, QHeaderView,QLineEdit, QCheckBox,
     QWidget, QMessageBox, QComboBox, QSlider, QGraphicsView, QGraphicsScene,
-    QVBoxLayout, QSizePolicy
+    QVBoxLayout, QSizePolicy, QProgressBar
  )
 from PyQt5.QtGui import QDoubleValidator, QIntValidator, QRegularExpressionValidator
 from PyQt5.QtCore import QRegularExpression, QThread, pyqtSignal
@@ -43,38 +43,134 @@ import networkx as nx
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 
+class LoadingScreen(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle('Processing...')
+        self.setGeometry(100, 100, 300, 100)
+        
+        layout = QVBoxLayout()
+        self.label = QLabel('Processing image data...', self)
+        layout.addWidget(self.label)
+        
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setRange(0, 0)  # Indeterminate progress
+        layout.addWidget(self.progress_bar)
+        
+        self.setLayout(layout)
+        
 class SegmentationThread(QThread):
-    finished = pyqtSignal(np.ndarray)
+    finished = pyqtSignal(np.ndarray, str, str, float)
 
-    def __init__(self, image_data, method):
+    def __init__(self, image_data, method, GreyScaleSelectionindex, Blocksize=51, minManual=0,maxManual=255):
         super().__init__()
         self.image_data = image_data
         self.method = method
-
+        self.GreyScaleSelectionindex = GreyScaleSelectionindex
+        self.Blocksize = Blocksize
+        self.minManual = minManual
+        self.maxManual = maxManual
+        self.loading_screen = LoadingScreen()
+        
     def run(self):
-        segmentation_mask = np.zeros_like(self.image_data, dtype=bool)
+        # Show the loading screen
+        self.loading_screen.show()
+        minthreshold = ''
+        maxthreshold = ''
+        segmentation_mask = np.zeros_like(self.image_data, dtype=np.uint8)
         if self.method == "Otsu":
             threshold = threshold_otsu(self.image_data)
-            segmentation_mask = self.image_data > threshold
+            if self.GreyScaleSelectionindex == 0:
+                segmentation_mask = self.image_data > threshold
+                minthreshold = int(threshold)
+                maxthreshold = np.max(self.image_data)
+                print(f'min {minthreshold} max {maxthreshold}')
+            else:
+                segmentation_mask = self.image_data < threshold
+                minthreshold = 0
+                maxthreshold = int(threshold)
+                print(f'min {minthreshold} max {maxthreshold}')
         elif self.method == "Adaptive":
-            block_size = 35
-            local_thresh = threshold_local(self.image_data, block_size, offset=10)
-            segmentation_mask = self.image_data > local_thresh
+            if self.Blocksize.text() == '':
+                self.Blocksize = 51
+            else:
+                self.Blocksize = int(self.Blocksize.text())
+            if self.Blocksize % 2 == 0:  # Check if the number is odd
+                self.show_error_message("Even Number", "Please enter an **odd** number.")
+                return
+            threshold = threshold_local(self.image_data, self.Blocksize, offset=10)
+            if self.GreyScaleSelectionindex == 0:
+                segmentation_mask = self.image_data > threshold
+            else:
+                segmentation_mask = self.image_data < threshold
         elif self.method == "Li":
             threshold = threshold_li(self.image_data)
-            segmentation_mask = self.image_data > threshold
+            if self.GreyScaleSelectionindex == 0:
+                segmentation_mask = self.image_data > threshold
+                minthreshold = int(threshold)
+                maxthreshold = np.max(self.image_data)
+                print(f'min {minthreshold} max {maxthreshold}')
+            else:
+                segmentation_mask = self.image_data < threshold
+                minthreshold = 0
+                maxthreshold = int(threshold) 
+                print(f'min {minthreshold} max {maxthreshold}')
         elif self.method == "Yen":
             threshold = threshold_yen(self.image_data)
-            segmentation_mask = self.image_data > threshold
+            if self.GreyScaleSelectionindex == 0:
+                segmentation_mask = self.image_data > threshold
+                minthreshold = int(threshold)
+                maxthreshold = np.max(self.image_data)
+            else:
+                segmentation_mask = self.image_data < threshold
+                minthreshold = 0
+                maxthreshold = int(threshold)
         elif self.method == "Isodata":
             threshold = threshold_isodata(self.image_data)
-            segmentation_mask = self.image_data > threshold
+            if self.GreyScaleSelectionindex == 0:
+                segmentation_mask = self.image_data > threshold
+                minthreshold = int(threshold)
+                maxthreshold = np.max(self.image_data)
+            else:
+                segmentation_mask = self.image_data < threshold
+                minthreshold = 0
+                maxthreshold = int(threshold)
         elif self.method == "Triangle":
             threshold = threshold_triangle(self.image_data)
-            segmentation_mask = self.image_data > threshold
-        self.finished.emit(segmentation_mask)
+            if self.GreyScaleSelectionindex == 0:
+                segmentation_mask = self.image_data > threshold
+                minthreshold = int(threshold)
+                maxthreshold = np.max(self.image_data)
+            else:
+                segmentation_mask = self.image_data < threshold
+                minthreshold = 0
+                maxthreshold = int(threshold)
+        elif self.method == "Manual":
+            if self.minManual == '':
+                self.minManual = 0
+            else:
+                self.minManual = int(self.minManual)
+            if self.maxManual == '':
+                self.maxManual = 255
+            else:
+                self.maxManual = int(self.maxManual)
+            segmentation_mask = (self.image_data > self.minManual) & (self.image_data < self.maxManual)
+            minthreshold = self.minManual
+            maxthreshold = self.maxManual
+        
+        porosity = np.sum(segmentation_mask == False) / segmentation_mask.size
+        # Hide the loading screen
+        self.loading_screen.hide()
+        self.finished.emit(segmentation_mask, str(minthreshold), str(maxthreshold), porosity)
 
-
+    def show_error_message(self, title, message):
+        """Displays an error message box."""
+        msg = QMessageBox()
+        msg.setIcon(QMessageBox.Critical)
+        msg.setText(message)
+        msg.setWindowTitle(title)
+        msg.exec_()
+        
 class UI(QMainWindow):
     def __init__(self):
         super(UI,self).__init__()
@@ -345,14 +441,29 @@ class UI(QMainWindow):
         hist_layout.addWidget(self.hist_canvas)
         self.hist_view.setLayout(hist_layout)
         
+        self.GreyScaleSelectioncomboBox = self.findChild(QComboBox, 'GreyScaleSelectioncomboBox') 
+        
+        self.minthreshold = ''
+        self.minthreshold = ''
+        self.porosity = 1.0
+        
+        self.Porositylabel = self.findChild(QLabel, 'Porositylabel')
+        
         # Find buttons by object name from the UI file
         self.btnOtsu = self.findChild(QPushButton, "OtsupushButton")
         self.btnAdaptive = self.findChild(QPushButton, "AdaptivepushButton")
+        self.BlocksizelineEdit = self.findChild(QLineEdit, "BlocksizelineEdit")
+        self.BlocksizelineEdit.setValidator(int_validator)
         self.btnLi = self.findChild(QPushButton, "LipushButton")
         self.btnYen = self.findChild(QPushButton, "YenpushButton")
         self.btnIsodata = self.findChild(QPushButton, "IsodatapushButton")
         self.btnTriangle = self.findChild(QPushButton, "TrianglepushButton")
-    
+        self.btnManual = self.findChild(QPushButton, "manualThresholdingpushButton")
+        self.minManual = self.findChild(QLineEdit, "MinrthresholdinglineEdit")
+        self.minManual.setValidator(int_validator)
+        self.maxManual = self.findChild(QLineEdit, "MaxrthresholdinglineEdit")
+        self.maxManual.setValidator(int_validator)
+        
         # Connect buttons to the segmentation function
         self.btnOtsu.clicked.connect(lambda: self.run_segmentation("Otsu"))
         self.btnAdaptive.clicked.connect(lambda: self.run_segmentation("Adaptive"))
@@ -360,6 +471,7 @@ class UI(QMainWindow):
         self.btnYen.clicked.connect(lambda: self.run_segmentation("Yen"))
         self.btnIsodata.clicked.connect(lambda: self.run_segmentation("Isodata"))
         self.btnTriangle.clicked.connect(lambda: self.run_segmentation("Triangle"))
+        self.btnManual.clicked.connect(lambda: self.run_segmentation("Manual"))
     
         self.show()
         
@@ -623,6 +735,7 @@ class UI(QMainWindow):
             self.slider.setMaximum(self.image_data.shape[0] - 1)
             self.current_slice = 0
             self.update_view()
+            self.update_histogram()
             
             # Extract the filename from the full path and update the label
             file_name = os.path.basename(file_path)
@@ -650,7 +763,8 @@ class UI(QMainWindow):
     def update_view(self):
         if self.image_data is None:
             return
-    
+        plt.rcParams['font.size'] = 5
+        
         raw_slice, seg_slice = self.get_slice()
     
         # Clear the figure and remove extra whitespace
@@ -669,8 +783,8 @@ class UI(QMainWindow):
         self.ax.imshow(overlay)
     
         # Set axis labels and remove ticks
-        self.ax.set_xlabel("X-axis", labelpad=10)
-        self.ax.set_ylabel("Y-axis")
+        self.ax.set_xlabel("X-axis", labelpad=2)
+        self.ax.set_ylabel("Y-axis", labelpad=1)
         
         # self.ax.set_xticks([])  # Hide x ticks
         # self.ax.set_yticks([])  # Hide y ticks
@@ -679,24 +793,28 @@ class UI(QMainWindow):
         
         # Refresh the canvas
         self.canvas.draw()
-        self.update_histogram()
+        
 
     def run_segmentation(self, method):
         if self.image_data is None:
             return
-        self.thread = SegmentationThread(self.image_data, method)
+        self.thread = SegmentationThread(self.image_data, method, self.GreyScaleSelectioncomboBox.currentIndex(), Blocksize=self.BlocksizelineEdit, minManual=self.minManual.text(),maxManual=self.maxManual.text())
         self.thread.finished.connect(self.on_segmentation_done)
         self.thread.start()
 
-    def on_segmentation_done(self, segmentation_mask):
+    def on_segmentation_done(self, segmentation_mask, minthreshold, maxthreshold,porosity):
         self.segmentation_mask = segmentation_mask
+        self.minthreshold = minthreshold
+        self.maxthreshold = maxthreshold
+        self.porosity = porosity
         self.update_view()
+        self.update_histogram()
         
     def update_histogram(self):
         """Compute and display the grayscale histogram of the current slice."""
         if self.image_data is None:
             return
-    
+        plt.rcParams['font.size'] = 5
     
         # Clear previous histogram
         self.hist_ax.clear()
@@ -704,14 +822,21 @@ class UI(QMainWindow):
         self.hist_figure.subplots_adjust(left=0, right=1, top=1, bottom=0)
         
         # Compute histogram (256 bins for grayscale values)
-        self.hist_ax.hist(self. image_data.ravel(), bins=256, range=(0, 255), color='black')
+        self.hist_ax.hist(self.image_data.ravel(), bins=300, range=(0, 65536), color='black')
+        
+        if self.minthreshold != '' and self.maxthreshold != '':
+            print(self.minthreshold,self.maxthreshold)
+            # Add vertical lines for threshold values
+            self.hist_ax.axvline(int(self.minthreshold), color='red', linestyle='--', linewidth=2, label="Min Threshold")
+            self.hist_ax.axvline(int(self.maxthreshold), color='red', linestyle='--', linewidth=2, label="Max Threshold")
+        
     
         # Set labels
         # self.hist_ax.set_xlabel("Pixel Int.")
         # self.hist_ax.set_ylabel("Freq.")
     
         # Remove unnecessary grid/ticks
-        self.hist_ax.set_xticks(np.linspace(0, 255, num=4))  # Tick marks at 0, 50, 100, ...
+        self.hist_ax.set_xticks(np.linspace(0, np.max(self.image_data), num=7))  # Tick marks at 0, 50, 100, ...
         self.hist_ax.set_yticks([])  # Hide Y ticks for a cleaner look
         
         self.hist_figure.tight_layout()
@@ -719,6 +844,8 @@ class UI(QMainWindow):
         
         # Refresh canvas
         self.hist_canvas.draw()
+        
+        self.Porositylabel.setText(f'Porosity: {self.porosity:.4f}')
     
     def run_voxel2stl(self):
         # Check if there is at least one file with voxel size in the table

@@ -28,7 +28,7 @@
     <item>
      <widget class="QTabWidget" name="ModetabWidget">
       <property name="currentIndex">
-       <number>1</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="PropertiesGenerationtab">
        <attribute name="title">
@@ -1124,7 +1124,7 @@
            </widget>
           </item>
           <item>
-           <widget class="QComboBox" name="comboBox">
+           <widget class="QComboBox" name="GreyScaleSelectioncomboBox">
             <item>
              <property name="text">
               <string>Ligther Greys</string>
@@ -1204,8 +1204,11 @@
               <verstretch>0</verstretch>
              </sizepolicy>
             </property>
+            <property name="text">
+             <string/>
+            </property>
             <property name="placeholderText">
-             <string>Block size </string>
+             <string>Block size (default 51)</string>
             </property>
            </widget>
           </item>
@@ -1254,7 +1257,11 @@
                  </widget>
                 </item>
                 <item>
-                 <widget class="QLineEdit" name="MinrthresholdinglineEdit"/>
+                 <widget class="QLineEdit" name="MinrthresholdinglineEdit">
+                  <property name="placeholderText">
+                   <string>Min (0)</string>
+                  </property>
+                 </widget>
                 </item>
                 <item>
                  <widget class="QLabel" name="label_4">
@@ -1264,7 +1271,18 @@
                  </widget>
                 </item>
                 <item>
-                 <widget class="QLineEdit" name="MaxrthresholdinglineEdit"/>
+                 <widget class="QLineEdit" name="MaxrthresholdinglineEdit">
+                  <property name="placeholderText">
+                   <string>Max (255)</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="manualThresholdingpushButton">
+                  <property name="text">
+                   <string>Apply</string>
+                  </property>
+                 </widget>
                 </item>
                </layout>
               </item>
@@ -1514,7 +1532,7 @@
                  </widget>
                 </item>
                 <item>
-                 <widget class="QLabel" name="label_5">
+                 <widget class="QLabel" name="Porositylabel">
                   <property name="text">
                    <string>Porosity: 1.0000</string>
                   </property>
