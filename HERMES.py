@@ -44,46 +44,60 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector
 import pyvista as pv
-from pyvistaqt import BackgroundPlotter
+from pyvistaqt import BackgroundPlotter, QtInteractor
 
 class VoxelRenderingWindow(QDialog):
-    def __init__(self, voxel_data, parent=None):
+    def __init__(self, voxel_data, VoxelSizeX, VoxelSizeY, VoxelSizeZ, parent=None):
+        if VoxelSizeX == '':
+            VoxelSizeX = 1
+        else:
+            VoxelSizeX = int(VoxelSizeX)
+        if VoxelSizeY == '':
+            VoxelSizeY = 1
+        else:
+            VoxelSizeY = int(VoxelSizeY)
+        if VoxelSizeZ == '':
+            VoxelSizeZ = 1
+        else:
+            VoxelSizeZ = int(VoxelSizeZ)
+            
         super().__init__(parent)
         self.setWindowTitle("Voxel Rendering")
         self.resize(800, 600)
 
         layout = QVBoxLayout(self)
         
-        # Convert the boolean voxel data to an integer (0 or 1)
+        # Convert voxel data to integer (0 or 1)
         voxel_data_int = voxel_data.astype(int)
         
         # Convert voxel data to PyVista format
-        grid = pv.ImageData()  
-        grid.dimensions = np.array(voxel_data_int.shape) + 1
-        grid.spacing = (10, 1, 1)  # Adjust voxel size if needed
+        grid = pv.ImageData()
+        grid.dimensions = np.array(voxel_data_int.shape) + 1  # PyVista requires +1
+        grid.spacing = (VoxelSizeX, VoxelSizeY, VoxelSizeZ)  # Adjust voxel size if needed
         grid.cell_data["values"] = voxel_data_int.flatten(order="F")  # Flatten for PyVista
         
-        # Create a plotter using pyvistaqt's BackgroundPlotter
-        self.plotter = BackgroundPlotter(show=True)
+        # **Thresholding to remove zero-valued voxels**
+        thresholded_grid = grid.threshold(0.5)  # Keeps values > 0
         
-        # Add the volume (without using the scalar color map)
-        volume = self.plotter.add_mesh(grid)
+        # **Extract the outer surface** (Required for smoothing)
+        surface = thresholded_grid.extract_surface()
         
-        # # Add edges to the voxel grid (display the voxel boundaries)
-        # edges = grid.extract_geometry()  # Extract geometry to create edges
-        # edges.plot(color="black", line_width=1)  # Plot edges with black color and thicker lines
+        # Create a plotter using QtInteractor (to embed in PyQt5 window)
+        self.plotter = QtInteractor(self)
         
-        # Optionally, turn off the scalar bar if it's being displayed
+        # Add the smoothed volume to the plot
+        self.plotter.add_mesh(surface, show_edges=False, opacity=1.0, cmap="coolwarm")
+        
+        # Add axes to show X, Y, Z directions
+        self.plotter.show_axes()
+        
+        # Remove the scalar bar
         self.plotter.remove_scalar_bar()
         
         # Layout for PyQt5 window
         layout.addWidget(self.plotter.interactor)
-        
         self.setLayout(layout)
         
-        # Show plotter
-        # self.plotter.show()
-
     def closeEvent(self, event):
         # Ensure that the plotter window is closed properly
         self.plotter.close()
@@ -421,6 +435,14 @@ class UI(QMainWindow):
         self.load_button = self.findChild(QPushButton, 'LoadTiffSegmentationpushButton')
         self.load_button.clicked.connect(self.load_tiff)
         
+        self.VoxelSizeX = self.findChild(QLineEdit, "VoxelSizeX")
+        self.VoxelSizeY = self.findChild(QLineEdit, "VoxelSizeY")
+        self.VoxelSizeZ = self.findChild(QLineEdit, "VoxelSizeZ")
+        
+        self.VoxelSizeX.setValidator(int_validator)
+        self.VoxelSizeY.setValidator(int_validator)
+        self.VoxelSizeZ.setValidator(int_validator)
+        
         self.file_labelSegmentation = self.findChild(QLabel, 'fileNameSegmentationlabel')
         
         self.slider = self.findChild(QSlider, 'CurrentPlanehorizontalSlider')
@@ -527,11 +549,24 @@ class UI(QMainWindow):
         self.volumeRenderingpushButton = self.findChild(QPushButton, "volumeRenderingSegmentationpushButton")
         self.volumeRenderingpushButton.clicked.connect(self.show_voxel_rendering)
         
+        self.SaveTiffSegmentationpushButton = self.findChild(QPushButton, "SaveTiffSegmentationpushButton")
+        self.SaveTiffSegmentationpushButton.clicked.connect(self.save_tiff_segmentation)
+        
         self.show()
     
+    def save_tiff_segmentation(self):
+        if hasattr(self, "segmentation_mask") and np.sum(self.segmentation_mask) != 0 and self.segmentation_mask is not None:
+            options = QFileDialog.Options()
+            file_name, _ = QFileDialog.getSaveFileName(self, "Save Segmentation", "", "TIFF Files (*.tif);;All Files (*)", options=options)
+            if file_name:
+                tiff.imwrite(file_name, self.segmentation_mask.astype(np.uint16),imagej=True) 
+                print(f"Segmentation saved as {file_name}")
+        else:
+            QMessageBox.warning(self, "No Data", "Please segment an image first.")
+        
     def show_voxel_rendering(self):
-        if hasattr(self, 'segmentation_mask') and self.segmentation_mask is not None:
-            self.voxel_window = VoxelRenderingWindow(self.segmentation_mask)
+        if hasattr(self, 'segmentation_mask') and np.sum(self.segmentation_mask) != 0 and self.segmentation_mask is not None:
+            self.voxel_window = VoxelRenderingWindow(self.segmentation_mask, self.VoxelSizeX.text(), self.VoxelSizeY.text(), self.VoxelSizeZ.text())
             self.voxel_window.show()
         else:
             QMessageBox.warning(self, "No Data", "Please segment an image first.")
@@ -705,6 +740,7 @@ class UI(QMainWindow):
                 'Laplacian': self.LaplaciancheckBox.isChecked(),
                 'LaplacianIter': self.LaplacianItertextEdit.text(),
                 'ScreenedPoisson': self.ScreenedPoissoncheckBox.isChecked(), 
+
                 'ScreenedPoissonIter': self.ScreenedPoissonItertextEdit.text(),
                 'RemoveIslands': self.RemoveIslandscheckBox.isChecked(),
                 'VoxelLength': self.VolumnLengthlineEdit.text(),
