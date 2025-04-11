@@ -160,7 +160,7 @@ def getstl(surfacename, tifvoxelsize, temp_number,volumeLength, corner, surfaceS
     tempName, vertices, faces = stlSmoothing(tempName, vertices, faces, surfaceSettings)   
     
     if savingOptions['property_save']:
-        computeProperties(os.path.basename(tempName)+'.stl', vertices,faces,temp_volume,tifvoxelsize,savingOptions)
+        computeProperties(os.path.basename(tempName)+'.stl', vertices,faces,temp_volume,tifvoxelsize,savingOptions,surfacename)
         
     if savingOptions['stl_save']:
         trimesh_mesh = loadMeshTrimesh(vertices,faces)
@@ -314,7 +314,7 @@ def remove_floating_islands_Stl(vertices,faces):
 
     return ms
 
-def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savingOptions):
+def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savingOptions,surfacename):
     propertyList = [stlName]
     propertyNames = ['StlName']  # To store the names of selected properties
 
@@ -362,7 +362,7 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
     
     
     if savingOptions['property_options']['FiberAngle'] or savingOptions['property_options']['FiberLength']:
-        azimuthMean, elevationMean, lengthMean, azimuthSTD, elevationSTD,lengthSTD  = analyseCenterLine(temp_volume,tifvoxelsize,savingOptions['property_options']['FiberAnglePlane'])
+        azimuthMean, elevationMean, lengthMean, azimuthSTD, elevationSTD,lengthSTD  = analyseCenterLine(temp_volume,tifvoxelsize,surfacename,savingOptions['property_options']['FiberAnglePlane'])
         if savingOptions['property_options']['FiberAngle']:
             propertyList.append(azimuthMean)
             propertyNames.append("MeanAzimuthAngle")
@@ -402,7 +402,7 @@ def getDiamter(image_volume,tifvoxelsize,sphereSize):
     
     return meanDiameter, stdDiameter
 
-def analyseCenterLine(image,tifvoxelsize,plane='XY'):
+def analyseCenterLine(image,tifvoxelsize,surfacename,plane='XY'):
     
     # Preprocess the image
     # Apply Gaussian filter with sigma=2
@@ -414,7 +414,7 @@ def analyseCenterLine(image,tifvoxelsize,plane='XY'):
     # Skeletonize the image
     skeleton = morphology.skeletonize(image_smoothed)
     
-    # tiff.imwrite(fileName[:-4]+'_skeleton.tif', skeleton.astype(np.uint16),imagej=True)
+    tiff.imwrite(surfacename[:-4]+'_skeleton.tif', skeleton.astype(np.uint16),imagej=True)
     
     # Extract centerline coordinates
     coords = np.column_stack(np.where(skeleton > 0))  # Get (Z, Y, X) coordinates
@@ -696,9 +696,9 @@ def run_voxel2stl():
     croppingFlag = 'Regular' # 'Regular' or 'Corner'
     print(croppingFlag)
     
-    filenames = [r'grid_physical_non_intersectingYZ.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
+    filenames = [r'C:\Users\luisa\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\grid_physical_60Elevation_0.5.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
     
-    filevoxels = [1] # one or more correspondig to filenames Ex: [1, 1.8, ...]
+    filevoxels = [0.5] # one or more correspondig to filenames Ex: [1, 1.8, ...]
     
     # Saving Flags 1 or 0 for True or False, respectively
     savingOptions = {
@@ -706,10 +706,10 @@ def run_voxel2stl():
         "tiff_path": '', # Path where files will be saved or '' for current directory
         "voxel_save": 0,
         "voxel_path": '',  # Path where files will be saved or '' for current directory
-        "stl_save": 1,
+        "stl_save": 0,
         "stl_path": '',  # Path where files will be saved or '' for current directory
-        "property_save": 0,
-        "property_path": '',  # Path where files will be saved or '' for current directory
+        "property_save": 1,
+        "property_path": r'C:\Users\luisa\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\test.txt',  # Path where files will be saved or '' for current directory
         "property_options": {
             "min_max": 0,
             "surf_area": 0,
@@ -720,9 +720,9 @@ def run_voxel2stl():
             "fiber_diam_sphere": 10,
             "pore_distribution": 0,
             "pore_dist_sphere": 50,
-            "FiberAngle": 0,
+            "FiberAngle": 1,
             "FiberAnglePlane": 'YZ',
-            "FiberLength": 0,
+            "FiberLength": 1,
             
         }
     }
