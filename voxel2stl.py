@@ -464,7 +464,7 @@ def analyseCenterLine(image,tifvoxelsize,surfacename,plane='XY'):
     # plot_centerlines_and_voxels(image, split_centerlines, labeled_image)
     
     # Compute angles
-    centerline_properties = calculate_centerline_properties(split_centerlines,tifvoxelsize,plane)
+    centerline_properties = calculate_centerline_properties(split_centerlines,tifvoxelsize,image,plane)
     
     azimuthMean,elevationMean,lengthMean = np.mean(centerline_properties,axis=0)
     azimuthSTD, elevationSTD,lengthSTD = np.std(centerline_properties, axis=0, ddof=0)
@@ -579,20 +579,23 @@ def split_and_order_centerlines(graph, branch_nodes, steps=4):
 
     return split_centerlines, G
 
-def calculate_centerline_properties(split_centerlines,tifvoxelsize, plane='XY'):
+def calculate_centerline_properties(split_centerlines,tifvoxelsize,image, plane='XY', step_size=4):
     """
-    Calculates the average azimuth and elevation angles along with length 
-    for each centerline based on ordered points. The plane parameter specifies 
-    from which plane the angles are computed.
+    Calculates average azimuth, elevation, length, and distance to background 
+    for endpoints of each centerline.
 
     Parameters:
         split_centerlines (list of lists): Ordered centerlines, each a list of (x, y, z) tuples.
-        plane (str): The reference plane for azimuth and elevation calculation. 
-                     Options: 'xy', 'xz', 'yz'.
+        tifvoxelsize (float): Size of one voxel in real-world units.
+        image (ndarray): 3D image array where background is 0.
+        plane (str): Plane used for azimuth/elevation computation ('XY', 'XZ', 'YZ').
 
     Returns:
-        list of tuples: [(avg_azimuth, avg_elevation, length) for each centerline]
+        list of dicts: Each dict contains avg_azimuth, avg_elevation, length, 
+                       first_point_distance, last_point_distance.
     """
+    # Compute distance transform from background (0 == background)
+    dist_transform = distance_transform_edt(image > 0)
     centerline_properties = []
 
     for centerline in split_centerlines:
@@ -600,9 +603,9 @@ def calculate_centerline_properties(split_centerlines,tifvoxelsize, plane='XY'):
         length = 0.0
         
         # Compute direction vectors and segment lengths
-        for i in range(len(centerline) - 1):
+        for i in range(0, len(centerline) - step_size, step_size):
             p1 = np.array(centerline[i])  
-            p2 = np.array(centerline[i + 1])
+            p2 = np.array(centerline[min(i + step_size, len(centerline) - 1)])
             vec = p2 - p1  
             vectors.append(vec)
             length += np.linalg.norm(vec)*tifvoxelsize  # Sum Euclidean distances
@@ -633,6 +636,15 @@ def calculate_centerline_properties(split_centerlines,tifvoxelsize, plane='XY'):
             avg_elevation = np.arcsin(mean_vector[2] / norm)  # φ (tilt in X)
         else:
             raise ValueError("Invalid plane option. Choose from 'XY', 'XZ', or 'YZ'.")
+        
+        # Get scaled distance to background for first and last points
+        first_point = tuple(np.round(centerline[0]).astype(int))
+        last_point = tuple(np.round(centerline[-1]).astype(int))
+
+        first_distance = dist_transform[first_point] * tifvoxelsize
+        last_distance = dist_transform[last_point] * tifvoxelsize
+        
+        length += first_distance + last_distance
 
         centerline_properties.append([float(np.degrees(avg_azimuth)), float(np.degrees(avg_elevation)), float(length)])
 
@@ -696,9 +708,11 @@ def run_voxel2stl():
     croppingFlag = 'Regular' # 'Regular' or 'Corner'
     print(croppingFlag)
     
-    filenames = [r'C:\Users\luisa\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\grid_physical_60Elevation_0.5.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
+    filenames = [r'C:\Users\luisa\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\grid_physical_60Elevation_0.5.tif',
+                 r'C:\Users\luisa\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\grid_physical_60Elevation_1.0.tif',
+                 r'C:\Users\luisa\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\grid_physical_60Elevation_1.5.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
     
-    filevoxels = [0.5] # one or more correspondig to filenames Ex: [1, 1.8, ...]
+    filevoxels = [0.5,1.0,1.5] # one or more correspondig to filenames Ex: [1, 1.8, ...]
     
     # Saving Flags 1 or 0 for True or False, respectively
     savingOptions = {
@@ -709,7 +723,7 @@ def run_voxel2stl():
         "stl_save": 0,
         "stl_path": '',  # Path where files will be saved or '' for current directory
         "property_save": 1,
-        "property_path": r'C:\Users\luisa\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\test.txt',  # Path where files will be saved or '' for current directory
+        "property_path": r'C:\Users\luisa\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\ValidationElevation60.txt',  # Path where files will be saved or '' for current directory
         "property_options": {
             "min_max": 0,
             "surf_area": 0,
