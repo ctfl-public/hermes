@@ -159,6 +159,13 @@ def getstl(surfacename, tifvoxelsize, temp_number,volumeLength, corner, surfaceS
     # Perform smoothing 
     tempName, vertices, faces = stlSmoothing(tempName, vertices, faces, surfaceSettings)   
     
+    # Check mesh 
+    volume_check, watertight_check = checkMesh(vertices, faces)
+
+    if not volume_check or not watertight_check:
+        print('%s needs fixing!'%tempName)
+        fixMesh(tempName, vertices, faces)
+
     if savingOptions['property_save']:
         computeProperties(os.path.basename(tempName)+'.stl', vertices,faces,temp_volume,tifvoxelsize,savingOptions,surfacename)
         
@@ -313,6 +320,30 @@ def remove_floating_islands_Stl(vertices,faces):
     ms.apply_filter('meshing_remove_selected_vertices_and_faces')
 
     return ms
+
+def checkMesh(vertices,faces):
+    mesh = loadMeshTrimesh(vertices,faces)
+    manifoldMesh =  mesh.is_volume
+    watertightMesh = mesh.is_watertight
+    
+    return manifoldMesh, watertightMesh
+
+def fixMesh(FileName,vertices,faces):
+    # Load mesh 
+    ms = loadMeshPymeshlab(vertices,faces)
+    
+    ms.apply_filter('generate_surface_reconstruction_screened_poisson', depth=8, preclean=True)
+    ms.apply_filter('meshing_remove_null_faces')
+    ms.apply_filter('meshing_repair_non_manifold_edges') 
+    ms.apply_filter('meshing_repair_non_manifold_vertices')
+    ms.apply_filter('meshing_remove_duplicate_faces')
+    ms.apply_filter('meshing_remove_duplicate_vertices')
+    ms.apply_filter('meshing_re_orient_faces_coherently')
+
+    FileName = FileName+'_Fixed.stl'
+    ms.save_current_mesh(FileName, binary=False)
+    
+    return loadMeshTrimesh(ms.vertex_matrix(),ms.face_matrix())
 
 def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savingOptions,surfacename):
     propertyList = [stlName]
@@ -708,11 +739,9 @@ def run_voxel2stl():
     croppingFlag = 'Regular' # 'Regular' or 'Corner'
     print(croppingFlag)
     
-    filenames = [r'C:\Users\luisa\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\grid_physical_60Elevation_0.5.tif',
-                 r'C:\Users\luisa\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\grid_physical_60Elevation_1.0.tif',
-                 r'C:\Users\luisa\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\grid_physical_60Elevation_1.5.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
+    filenames = [r'S1_0.8580_1518_NI8.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
     
-    filevoxels = [0.5,1.0,1.5] # one or more correspondig to filenames Ex: [1, 1.8, ...]
+    filevoxels = [0.8580] # one or more correspondig to filenames Ex: [1, 1.8, ...]
     
     # Saving Flags 1 or 0 for True or False, respectively
     savingOptions = {
@@ -720,13 +749,13 @@ def run_voxel2stl():
         "tiff_path": '', # Path where files will be saved or '' for current directory
         "voxel_save": 0,
         "voxel_path": '',  # Path where files will be saved or '' for current directory
-        "stl_save": 0,
+        "stl_save": 1,
         "stl_path": '',  # Path where files will be saved or '' for current directory
-        "property_save": 1,
-        "property_path": r'C:\Users\luisa\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\ValidationElevation60.txt',  # Path where files will be saved or '' for current directory
+        "property_save": 0,
+        "property_path": '',  # Path where files will be saved or '' for current directory
         "property_options": {
             "min_max": 0,
-            "surf_area": 0,
+            "surf_area": 1,
             "closed_volume": 0,
             "vol_by_area": 0,
             "porosity": 0,
@@ -744,7 +773,7 @@ def run_voxel2stl():
     
     if croppingFlag == 'Regular':
         # If both are set to 0 Full volume will be prioritize
-        volumeLength = 0 # In um or enter 0 for Full volume
+        volumeLength = 500 # In um or enter 0 for Full volume
         numVolumes = 1 # Number of volumes or enter 0 for Lego
 
         cropSettings = filenames, filevoxels, numVolumes, volumeLength
@@ -768,4 +797,6 @@ def run_voxel2stl():
     voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions)
 
 if __name__ == '__main__':
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(script_dir)
     run_voxel2stl()
