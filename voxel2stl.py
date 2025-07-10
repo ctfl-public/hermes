@@ -164,7 +164,7 @@ def getstl(surfacename, tifvoxelsize, temp_number,volumeLength, corner, surfaceS
 
     if not volume_check or not watertight_check:
         print('%s needs fixing!'%tempName)
-        fixMesh(tempName, vertices, faces)
+        tempName, vertices, faces = fixMesh(tempName, vertices, faces)
 
     if savingOptions['property_save']:
         computeProperties(os.path.basename(tempName)+'.stl', vertices,faces,temp_volume,tifvoxelsize,savingOptions,surfacename)
@@ -324,9 +324,9 @@ def remove_floating_islands_Stl(vertices,faces):
 def checkMesh(vertices,faces):
     mesh = loadMeshTrimesh(vertices,faces)
     manifoldMesh =  mesh.is_volume
-    watertightMesh = mesh.is_watertight
+    # watertightMesh = mesh.is_watertight
     
-    return manifoldMesh, watertightMesh
+    return manifoldMesh
 
 def fixMesh(FileName,vertices,faces):
     # Load mesh 
@@ -340,10 +340,10 @@ def fixMesh(FileName,vertices,faces):
     ms.apply_filter('meshing_remove_duplicate_vertices')
     ms.apply_filter('meshing_re_orient_faces_coherently')
 
-    FileName = FileName+'_Fixed.stl'
-    ms.save_current_mesh(FileName, binary=False)
+    FileName = FileName+'_Fixed'
+    # ms.save_current_mesh(FileName+'.stl', binary=False)
     
-    return loadMeshTrimesh(ms.vertex_matrix(),ms.face_matrix())
+    return FileName, ms.vertex_matrix(), ms.face_matrix()
 
 def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savingOptions,surfacename):
     propertyList = [stlName]
