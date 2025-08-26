@@ -19,6 +19,12 @@ from pathlib import Path
 import re
 import networkx as nx
 
+from trimesh.repair import (
+    fill_holes,
+    fix_winding,
+    fix_normals,
+)
+
 def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
     
     if croppingFlag == 'Regular':
@@ -84,13 +90,17 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
                         
                         corner = np.zeros(3, dtype='int')
                         # get random temp corner
-                        corner[0] = random.randint(0,int(voxelsLegth[0]-volumeLength)) 
-                        corner[1] = random.randint(0,int(voxelsLegth[1]-volumeLength))
-                        corner[2] = random.randint(0,int(voxelsLegth[2]-volumeLength))
+                        for i in range(3):
+                            #if voxelsLegth[i] < volumeLength:
+                            #    raise ValueError(f"volumeLength ({volumeLength}) is larger than voxelsLength[{i}] ({voxelsLegth[i]})")
+                            corner[i] = random.randint(0, int(voxelsLegth[i]))
+                        #corner[0] = random.randint(0,int(voxelsLegth[0]-volumeLength)) 
+                        #corner[1] = random.randint(0,int(voxelsLegth[1]-volumeLength))
+                        #corner[2] = random.randint(0,int(voxelsLegth[2]-volumeLength))
                         # center crop
-                        # corner[0] = (voxelsLegth[0]-volumeLength)/2 #random.randint(0,voxelsLegth[0]-volumeLength) 
-                        # corner[1] = (voxelsLegth[1]-volumeLength)/2 #random.randint(0,voxelsLegth[1]-volumeLength)
-                        # corner[2] = (voxelsLegth[2]-volumeLength)/2 #random.randint(0,voxelsLegth[2]-volumeLength)
+                        #corner[0] = (voxelsLegth[0]-volumeLength)/2 #random.randint(0,voxelsLegth[0]-volumeLength) 
+                        #corner[1] = (voxelsLegth[1]-volumeLength)/2 #random.randint(0,voxelsLegth[1]-volumeLength)
+                        #corner[2] = (voxelsLegth[2]-volumeLength)/2 #random.randint(0,voxelsLegth[2]-volumeLength)
 
                         
                         getstl(surf, filevoxels[tempNameIndex], temp_number,volumeLength, corner, surfaceSettings, savingOptions)
@@ -254,6 +264,16 @@ def stlSmoothing(FileName, vertices, faces, surfaceSettings ):
     # print('Finish saving',basestl)
     
     # Apply filter iteration i
+    if surfaceSettings['RemoveIslandsFlag']: 
+        ms = remove_floating_islands_Stl(vertices,faces)
+        removeIsland = '_NI'
+        mesh = ms.current_mesh()
+        vertices = mesh.vertex_matrix()
+        faces = mesh.face_matrix()
+        
+    else:
+        removeIsland = ''
+
     if surfaceSettings['laplacianFlag']:
         # Load mesh from vertices and faces
         trimesh_mesh = loadMeshTrimesh(vertices,faces)
@@ -273,14 +293,6 @@ def stlSmoothing(FileName, vertices, faces, surfaceSettings ):
     else:
         filterName = ''
     
-    if surfaceSettings['RemoveIslandsFlag']: 
-        ms = remove_floating_islands_Stl(vertices,faces)
-        removeIsland = '_NI'
-        mesh = ms.current_mesh()
-        vertices = mesh.vertex_matrix()
-        faces = mesh.face_matrix()
-    else:
-        removeIsland = ''
         
     FileName = FileName+filterName+removeIsland
     
@@ -311,6 +323,9 @@ def remove_floating_islands_Stl(vertices,faces):
 
     # Delete the selected small components
     ms.apply_filter('meshing_remove_selected_vertices_and_faces')
+    mesh = ms.current_mesh()
+    mesh1 = trimesh.Trimesh(vertices=mesh.vertex_matrix(), faces=mesh.face_matrix(), process=False)
+    print("Watertight?", mesh1.is_watertight)
 
     return ms
 
@@ -687,18 +702,18 @@ def run_voxel2stl():
     # Surface Settings
     surfaceSettings = {
         "laplacianFlag": 1,
-        "laplacian_iter": 1,
+        "laplacian_iter": 2,
         "ScreenedPoissonFlag": 0,
         "ScreenedPoisson_iter": 8,
-        "RemoveIslandsFlag": 0
+        "RemoveIslandsFlag": 1
         }
     
     croppingFlag = 'Regular' # 'Regular' or 'Corner'
     print(croppingFlag)
     
-    filenames = [r'grid_physical_non_intersectingYZ.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
+    filenames = [r'CC2_5.38487_4367.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
     
-    filevoxels = [1] # one or more correspondig to filenames Ex: [1, 1.8, ...]
+    filevoxels = [5.38487] # one or more correspondig to filenames Ex: [1, 1.8, ...]
     
     # Saving Flags 1 or 0 for True or False, respectively
     savingOptions = {
@@ -715,7 +730,7 @@ def run_voxel2stl():
             "surf_area": 0,
             "closed_volume": 0,
             "vol_by_area": 0,
-            "porosity": 0,
+            "porosity": 1,
             "fiber_diameter": 0,
             "fiber_diam_sphere": 10,
             "pore_distribution": 0,
@@ -730,14 +745,14 @@ def run_voxel2stl():
     
     if croppingFlag == 'Regular':
         # If both are set to 0 Full volume will be prioritize
-        volumeLength = 0 # In um or enter 0 for Full volume
+        volumeLength = 2000 # In um or enter 0 for Full volume
         numVolumes = 1 # Number of volumes or enter 0 for Lego
 
         cropSettings = filenames, filevoxels, numVolumes, volumeLength
         print(cropSettings)
         
     elif croppingFlag == 'Corners':
-        volumeLength = 100 # In um
+        volumeLength = 1000 # In um
         
         cornersMTX = [(1,2,3), (3,2,6)] # list of tuple coordinates in the format (x,y,z)
         

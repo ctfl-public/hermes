@@ -1,0 +1,2 @@
+StlName	SurfaceArea	ClosedVolume	Volume/SurfaceArea
+S4_1.0487_2201_NI8_V0_1518-127-1586-200_laplacian1.stl	364577.0048	808300.5503	2.2171
