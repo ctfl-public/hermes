@@ -18,6 +18,7 @@ from skimage.feature import peak_local_max
 from pathlib import Path
 import re
 import networkx as nx
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
     
@@ -39,6 +40,7 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
                 tempMTX[tempNameIndex] += 1
      
     temp_number = 0
+    max_workers = min(8, (os.cpu_count() or 1))  # Cap at 8 workers
     for surf in filenames:
         tempNameIndex = filenames.index(surf)
         
@@ -46,7 +48,7 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
         image_volume = loadData(surf)
                 
         # max voxel length in x, y, and z
-        voxelsLegth = (image_volume.shape[0],image_volume.shape[1],image_volume.shape[2])
+        voxelsLength = (image_volume.shape[0],image_volume.shape[1],image_volume.shape[2])
         
         if croppingFlag == 'Regular':
             if volumeLength == 0: # create stl from all the volume
@@ -57,9 +59,9 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
             
             elif numVolumes == 0:
                 # Number of volumes in each direction
-                dimX = int(voxelsLegth[0]*filevoxels[tempNameIndex]/volumeLength)
-                dimY = int(voxelsLegth[0]*filevoxels[tempNameIndex]/volumeLength)
-                dimZ = int(voxelsLegth[0]*filevoxels[tempNameIndex]/volumeLength)
+                dimX = int(voxelsLength[0]*filevoxels[tempNameIndex]/volumeLength)
+                dimY = int(voxelsLength[0]*filevoxels[tempNameIndex]/volumeLength)
+                dimZ = int(voxelsLength[0]*filevoxels[tempNameIndex]/volumeLength)
                 
                 totalvolumes = dimX*dimY*dimZ
                 # if totalvolumes > 10:
@@ -74,32 +76,79 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
                     temp_number += 1
                     
             else:
-                for times in range(tempMTX[tempNameIndex]):
-                    
-                    print('corner',times,'of',surf)
-                    if numVolumes != 0:
-                         
-                        # name of iteration volume
-                        # tempName = filenames[:-4]+'_V%i'%(temp)
-                        
-                        corner = np.zeros(3, dtype='int')
-                        # get random temp corner
-                        corner[0] = random.randint(0,int(voxelsLegth[0]-volumeLength)) 
-                        corner[1] = random.randint(0,int(voxelsLegth[1]-volumeLength))
-                        corner[2] = random.randint(0,int(voxelsLegth[2]-volumeLength))
-                        # center crop
-                        # corner[0] = (voxelsLegth[0]-volumeLength)/2 #random.randint(0,voxelsLegth[0]-volumeLength) 
-                        # corner[1] = (voxelsLegth[1]-volumeLength)/2 #random.randint(0,voxelsLegth[1]-volumeLength)
-                        # corner[2] = (voxelsLegth[2]-volumeLength)/2 #random.randint(0,voxelsLegth[2]-volumeLength)
+                volumes_to_process = numVolumes
 
+                if volumes_to_process > 5:  # Only parallelize if worth it
+                    print(f'Processing {volumes_to_process} random volumes in parallel for {surf}...')
+                    
+                    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                        # Submit all tasks
+                        futures = []
+                        for i in range(volumes_to_process):
+                            seed = random.randint(0, 1000000) + i
+                            future = executor.submit(process_single_volume, 
+                                                   (surf, filevoxels[tempNameIndex], temp_number + i,
+                                                    volumeLength, voxelsLength, seed))
+                            futures.append(future)
                         
-                        getstl(surf, filevoxels[tempNameIndex], temp_number,volumeLength, corner, surfaceSettings, savingOptions)
-                        temp_number += 1
+                        # Wait for completion and handle results
+                        for future in as_completed(futures):
+                            try:
+                                result = future.result()
+                                print(result)
+                            except Exception as e:
+                                print(f"Error processing volume: {e}")
+                    
+                    temp_number += volumes_to_process
+
+                else:
+                    # Process sequentially for small number of volumes
+                    for times in range(tempMTX[tempNameIndex]):
+                        
+                        print('corner',times,'of',surf)
+                        if numVolumes != 0:
+                            
+                            # name of iteration volume
+                            # tempName = filenames[:-4]+'_V%i'%(temp)
+                            
+                            corner = np.zeros(3, dtype='int')
+                            # get random temp corner
+                            corner[0] = random.randint(0,int(voxelsLength[0]-volumeLength)) 
+                            corner[1] = random.randint(0,int(voxelsLength[1]-volumeLength))
+                            corner[2] = random.randint(0,int(voxelsLength[2]-volumeLength))
+                            # center crop
+                            # corner[0] = (voxelsLength[0]-volumeLength)/2 #random.randint(0,voxelsLength[0]-volumeLength) 
+                            # corner[1] = (voxelsLength[1]-volumeLength)/2 #random.randint(0,voxelsLength[1]-volumeLength)
+                            # corner[2] = (voxelsLength[2]-volumeLength)/2 #random.randint(0,voxelsLength[2]-volumeLength)
+
+                            
+                            getstl(surf, filevoxels[tempNameIndex], temp_number,volumeLength, corner, surfaceSettings, savingOptions)
+                            temp_number += 1
 
         elif croppingFlag == 'Corners':
             for corner in cornersMTX:
                 getstl(surf, filevoxels[tempNameIndex], temp_number,volumeLength, corner, surfaceSettings, savingOptions)
                 temp_number += 1
+
+def process_single_volume(args):
+    """
+    Worker function to process a single volume in parallel.
+    """
+    surf, filevoxel, temp_number, volumeLength, voxelsLength, seed = args
+    
+    # Set random seed for reproducibility in parallel processing
+    random.seed(seed)
+    
+    corner = np.zeros(3, dtype='int')
+    # get random temp corner
+    corner[0] = random.randint(0, voxelsLength[0] - volumeLength) 
+    corner[1] = random.randint(0, voxelsLength[1] - volumeLength)
+    corner[2] = random.randint(0, voxelsLength[2] - volumeLength)
+    
+    # Call getstl function
+    getstl(surf, filevoxel, temp_number, volumeLength, corner)
+    
+    return f"Processed corner {temp_number} of {surf}"
 
 def loadData(surf):
     if surf.endswith('.tif'):
@@ -393,7 +442,7 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
     
     
     if savingOptions['property_options']['FiberAngle'] or savingOptions['property_options']['FiberLength']:
-        azimuthMean, elevationMean, lengthMean, azimuthSTD, elevationSTD,lengthSTD  = analyseCenterLine(temp_volume,tifvoxelsize,surfacename,savingOptions['property_options']['FiberAnglePlane'])
+        azimuthMean, elevationMean, lengthMean, azimuthSTD, elevationSTD,lengthSTD  = analyzeCenterLine(temp_volume,tifvoxelsize,surfacename,savingOptions['property_options']['FiberAnglePlane'])
         if savingOptions['property_options']['FiberAngle']:
             propertyList.append(azimuthMean)
             propertyNames.append("MeanAzimuthAngle")
@@ -433,7 +482,7 @@ def getDiamter(image_volume,tifvoxelsize,sphereSize):
     
     return meanDiameter, stdDiameter
 
-def analyseCenterLine(image,tifvoxelsize,surfacename,plane='XY'):
+def analyzeCenterLine(image,tifvoxelsize,surfacename,plane='XY'):
     
     # Preprocess the image
     # Apply Gaussian filter with sigma=2
