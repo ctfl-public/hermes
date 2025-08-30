@@ -88,7 +88,7 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
                             seed = random.randint(0, 1000000) + i
                             future = executor.submit(process_single_volume, 
                                                    (surf, filevoxels[tempNameIndex], temp_number + i,
-                                                    volumeLength, voxelsLength, seed))
+                                                    volumeLength, voxelsLength, seed, surfaceSettings, savingOptions))
                             futures.append(future)
                         
                         # Wait for completion and handle results
@@ -134,7 +134,7 @@ def process_single_volume(args):
     """
     Worker function to process a single volume in parallel.
     """
-    surf, filevoxel, temp_number, volumeLength, voxelsLength, seed = args
+    surf, filevoxel, temp_number, volumeLength, voxelsLength, seed, surfaceSettings, savingOptions = args
     
     # Set random seed for reproducibility in parallel processing
     random.seed(seed)
@@ -146,7 +146,7 @@ def process_single_volume(args):
     corner[2] = random.randint(0, voxelsLength[2] - volumeLength)
     
     # Call getstl function
-    getstl(surf, filevoxel, temp_number, volumeLength, corner)
+    getstl(surf, filevoxel, temp_number, volumeLength, corner, surfaceSettings, savingOptions)
     
     return f"Processed corner {temp_number} of {surf}"
 
@@ -209,9 +209,9 @@ def getstl(surfacename, tifvoxelsize, temp_number,volumeLength, corner, surfaceS
     tempName, vertices, faces = stlSmoothing(tempName, vertices, faces, surfaceSettings)   
     
     # Check mesh 
-    volume_check, watertight_check = checkMesh(vertices, faces)
+    volume_check = checkMesh(vertices, faces)
 
-    if not volume_check or not watertight_check:
+    if not volume_check:
         print('%s needs fixing!'%tempName)
         tempName, vertices, faces = fixMesh(tempName, vertices, faces)
 
@@ -430,16 +430,16 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
         propertyNames.append("Porosity")
 
     if savingOptions['property_options']['fiber_diameter']:
-        meanDiameter, stdDiameter = getDiamter(temp_volume, tifvoxelsize,savingOptions['property_options']['fiber_diam_sphere'])
+        meanDiameter, stdDiameter = getDiamter(temp_volume, tifvoxelsize, savingOptions['property_options']['fiber_diam_sphere'])
         propertyList.append(meanDiameter)
         propertyList.append(stdDiameter)
         propertyNames.extend(["fiber_diameter_Mean", "fiber_diameter_Std"])
 
     if savingOptions['property_options']['pore_distribution']:
-        pore_diameter = getPoreDistribution(temp_volume, tifvoxelsize)
-        propertyList.append(pore_diameter)
-        propertyNames.append("poredistribution")
-    
+        meanPore, stdPore = getPoreDistribution(temp_volume, tifvoxelsize, savingOptions['property_options']['pore_dist_sphere'])
+        propertyList.append(meanPore)
+        propertyList.append(stdPore)
+        propertyNames.extend(["meanPore", "stdPore"])
     
     if savingOptions['property_options']['FiberAngle'] or savingOptions['property_options']['FiberLength']:
         azimuthMean, elevationMean, lengthMean, azimuthSTD, elevationSTD,lengthSTD  = analyzeCenterLine(temp_volume,tifvoxelsize,surfacename,savingOptions['property_options']['FiberAnglePlane'])
@@ -459,6 +459,31 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
             propertyNames.append("StDLength")
         
     writeProperties(savingOptions, propertyNames, propertyList)
+
+def getPoreDistribution(image_volume, tifvoxelsize, sphereSize):
+    # Invert image_volume
+    image_volume = (image_volume == 0).astype(int)
+
+    # Distance transform
+    distance_transform = distance_transform_edt(image_volume)
+    
+    # Detect local maxima
+    local_maxima_coords = peak_local_max(distance_transform, min_distance=int(sphereSize/2), labels=image_volume.astype(int))
+    
+    # Measure diameters
+    pore_diameters = []
+    
+    for max_coords in local_maxima_coords:
+        distances = distance_transform[tuple(max_coords)]
+        pore_diameters.append(2 * np.max(distances))
+    
+    # Scale given voxel size
+    pore_diameters = np.multiply(pore_diameters,tifvoxelsize)-tifvoxelsize/2
+    
+    meanPore = np.mean(pore_diameters)
+    stdPore = np.std(pore_diameters)
+    
+    return meanPore, stdPore
 
 def getDiamter(image_volume,tifvoxelsize,sphereSize):
     # Distance transform
@@ -788,9 +813,9 @@ def run_voxel2stl():
     croppingFlag = 'Regular' # 'Regular' or 'Corner'
     print(croppingFlag)
     
-    filenames = [r'S1_0.8580_1518_NI8.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
+    filenames = [r'E:\LuisChacon\HERMES\1-31-25_Americarb_HiRes\1-31-25_Americarb_HiRes_binarizedtifs.labels.filtered_cropped.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
     
-    filevoxels = [0.8580] # one or more correspondig to filenames Ex: [1, 1.8, ...]
+    filevoxels = [1.33174] # one or more correspondig to filenames Ex: [1, 1.8, ...]
     
     # Saving Flags 1 or 0 for True or False, respectively
     savingOptions = {
@@ -798,23 +823,23 @@ def run_voxel2stl():
         "tiff_path": '', # Path where files will be saved or '' for current directory
         "voxel_save": 0,
         "voxel_path": '',  # Path where files will be saved or '' for current directory
-        "stl_save": 1,
+        "stl_save": 0,
         "stl_path": '',  # Path where files will be saved or '' for current directory
-        "property_save": 0,
-        "property_path": '',  # Path where files will be saved or '' for current directory
+        "property_save": 1,
+        "property_path": r'E:\LuisChacon\HERMES\1-31-25_Americarb_HiRes\Americarb_HiRes_properties_700.txt',  # Path where files will be saved or '' for current directory
         "property_options": {
             "min_max": 0,
             "surf_area": 1,
-            "closed_volume": 0,
-            "vol_by_area": 0,
-            "porosity": 0,
+            "closed_volume": 1,
+            "vol_by_area": 1,
+            "porosity": 1,
             "fiber_diameter": 0,
-            "fiber_diam_sphere": 10,
+            "fiber_diam_sphere": 0,
             "pore_distribution": 0,
-            "pore_dist_sphere": 50,
-            "FiberAngle": 1,
+            "pore_dist_sphere": 0,
+            "FiberAngle": 0,
             "FiberAnglePlane": 'YZ',
-            "FiberLength": 1,
+            "FiberLength": 0,
             
         }
     }
@@ -822,8 +847,8 @@ def run_voxel2stl():
     
     if croppingFlag == 'Regular':
         # If both are set to 0 Full volume will be prioritize
-        volumeLength = 500 # In um or enter 0 for Full volume
-        numVolumes = 1 # Number of volumes or enter 0 for Lego
+        volumeLength = 700 # In um or enter 0 for Full volume
+        numVolumes = 200 # Number of volumes or enter 0 for Lego
 
         cropSettings = filenames, filevoxels, numVolumes, volumeLength
         print(cropSettings)
