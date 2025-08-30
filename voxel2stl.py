@@ -347,9 +347,10 @@ def loadMeshTrimesh(vertices,faces):
 
 def loadMeshPymeshlab(vertices,faces):
     import pymeshlab as ml
-    # Create meshLab mesh from vertices and faces
-    meshTarget = ml.Mesh(vertices,faces)
     
+    # Create meshLab mesh from vertices and faces
+    meshTarget = ml.Mesh(vertices,faces) 
+
     # Create a MeshSet object
     ms = ml.MeshSet(verbose=True)
     
@@ -378,6 +379,7 @@ def checkMesh(vertices,faces):
     return manifoldMesh
 
 def fixMesh(FileName,vertices,faces):
+    print('trying to fix it', FileName)
     # Load mesh 
     ms = loadMeshPymeshlab(vertices,faces)
     
@@ -390,9 +392,10 @@ def fixMesh(FileName,vertices,faces):
     ms.apply_filter('meshing_re_orient_faces_coherently')
 
     FileName = FileName+'_Fixed'
+    print(FileName, 'fixed!')
     # ms.save_current_mesh(FileName+'.stl', binary=False)
     
-    return FileName, ms.vertex_matrix(), ms.face_matrix()
+    return FileName, ms.current_mesh().vertex_matrix(), ms.current_mesh().face_matrix()
 
 def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savingOptions,surfacename):
     propertyList = [stlName]
@@ -468,7 +471,7 @@ def getPoreDistribution(image_volume, tifvoxelsize, sphereSize):
     distance_transform = distance_transform_edt(image_volume)
     
     # Detect local maxima
-    local_maxima_coords = peak_local_max(distance_transform, min_distance=int(sphereSize/2), labels=image_volume.astype(int))
+    local_maxima_coords = peak_local_max(distance_transform, min_distance=int(0.5*sphereSize/tifvoxelsize), labels=image_volume.astype(int))
     
     # Measure diameters
     pore_diameters = []
@@ -490,7 +493,7 @@ def getDiamter(image_volume,tifvoxelsize,sphereSize):
     distance_transform = distance_transform_edt(image_volume)
     
     # Detect local maxima
-    local_maxima_coords = peak_local_max(distance_transform, min_distance=int(sphereSize/2), labels=image_volume.astype(int))
+    local_maxima_coords = peak_local_max(distance_transform, min_distance=int(0.5*sphereSize/tifvoxelsize), labels=image_volume.astype(int))
     
     # Measure diameters
     fiber_diameters = []
@@ -813,9 +816,9 @@ def run_voxel2stl():
     croppingFlag = 'Regular' # 'Regular' or 'Corner'
     print(croppingFlag)
     
-    filenames = [r'E:\LuisChacon\HERMES\1-31-25_Americarb_HiRes\1-31-25_Americarb_HiRes_binarizedtifs.labels.filtered_cropped.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
+    filenames = [r'E:\LuisChacon\HERMES\RedRTV\3275_RedRTV_Cropped_3.177714.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
     
-    filevoxels = [1.33174] # one or more correspondig to filenames Ex: [1, 1.8, ...]
+    filevoxels = [3.177714] # one or more correspondig to filenames Ex: [1, 1.8, ...]
     
     # Saving Flags 1 or 0 for True or False, respectively
     savingOptions = {
@@ -826,7 +829,7 @@ def run_voxel2stl():
         "stl_save": 0,
         "stl_path": '',  # Path where files will be saved or '' for current directory
         "property_save": 1,
-        "property_path": r'E:\LuisChacon\HERMES\1-31-25_Americarb_HiRes\Americarb_HiRes_properties_700.txt',  # Path where files will be saved or '' for current directory
+        "property_path": r'E:\LuisChacon\HERMES\RedRTV\RedRTV_800.txt',  # Path where files will be saved or '' for current directory
         "property_options": {
             "min_max": 0,
             "surf_area": 1,
@@ -834,9 +837,9 @@ def run_voxel2stl():
             "vol_by_area": 1,
             "porosity": 1,
             "fiber_diameter": 0,
-            "fiber_diam_sphere": 0,
-            "pore_distribution": 0,
-            "pore_dist_sphere": 0,
+            "fiber_diam_sphere": 0, # in um
+            "pore_distribution": 1,
+            "pore_dist_sphere": 100, # in um
             "FiberAngle": 0,
             "FiberAnglePlane": 'YZ',
             "FiberLength": 0,
@@ -847,7 +850,7 @@ def run_voxel2stl():
     
     if croppingFlag == 'Regular':
         # If both are set to 0 Full volume will be prioritize
-        volumeLength = 700 # In um or enter 0 for Full volume
+        volumeLength = 500 # In um or enter 0 for Full volume
         numVolumes = 200 # Number of volumes or enter 0 for Lego
 
         cropSettings = filenames, filevoxels, numVolumes, volumeLength
