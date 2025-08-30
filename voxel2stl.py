@@ -287,7 +287,7 @@ def writeChenFormat(tempName,binary_volume,tifvoxelsize):
 def getMesh(binary_volume,length,voxel_size):
     
     # Create a mesh using the marching cubes algorithm
-    vertices, faces, _, _ = measure.marching_cubes(binary_volume)  ##add the parallel marching cubes here
+    vertices, faces, _, _ = measure.marching_cubes(binary_volume, allow_degenerate=False, method='lewiner')  ##add the parallel marching cubes here
     
     # Swap x and z to make it match the tif
     # Indices of the columns you want to swap
