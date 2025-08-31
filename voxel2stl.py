@@ -711,9 +711,9 @@ def run_voxel2stl():
     croppingFlag = 'Regular' # 'Regular' or 'Corner'
     print(croppingFlag)
     
-    filenames = [r'CC2_5.38487_4367.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
+    filenames = [r'S0_1.06923_2307_NI8.tif','S1_0.8580_1518_NI8.tif'] # one or more Ex: ['file1.tif', 'file2.dat', ...]
     
-    filevoxels = [5.38487] # one or more correspondig to filenames Ex: [1, 1.8, ...]
+    filevoxels = [1.06923,0.8580] # one or more correspondig to filenames Ex: [1, 1.8, ...]
     
     # Saving Flags 1 or 0 for True or False, respectively
     savingOptions = {
@@ -745,8 +745,8 @@ def run_voxel2stl():
     
     if croppingFlag == 'Regular':
         # If both are set to 0 Full volume will be prioritize
-        volumeLength = 2000 # In um or enter 0 for Full volume
-        numVolumes = 1 # Number of volumes or enter 0 for Lego
+        volumeLength = 200 # In um or enter 0 for Full volume
+        numVolumes = 10 # Number of volumes or enter 0 for Lego
 
         cropSettings = filenames, filevoxels, numVolumes, volumeLength
         print(cropSettings)
