@@ -21,6 +21,30 @@ import networkx as nx
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
+
+    if savingOptions['property_save']:
+        if savingOptions['property_path'] == '':
+            savingOptions['property_path'] = 'propertyFile.txt' 
+        
+        # Check if file exists to determine if we need to create a new name     
+        if os.path.exists(savingOptions['property_path']):
+            # Create a new name for the file with '_copy' and increment if needed
+            base_name, ext = os.path.splitext(savingOptions['property_path'])
+            copy_fileName = f"{base_name}_copy{ext}"
+    
+            # If the file copy already exists, increment the number until a unique name is found
+            counter = 1
+            while os.path.exists(copy_fileName):
+                copy_fileName = f"{base_name}_copy{counter}{ext}"
+                counter += 1
+            
+            # Update fileName to the new copy file name
+            savingOptions['property_path'] = copy_fileName
+        
+        
+        # Open the new file in write mode to save the data when computed
+        with open(savingOptions['property_path'], 'w') as f:
+            pass
     
     if croppingFlag == 'Regular':
         filenames, filevoxels, numVolumes, volumeLength = cropSettings
@@ -60,8 +84,8 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
             elif numVolumes == 0:
                 # Number of volumes in each direction
                 dimX = int(voxelsLength[0]*filevoxels[tempNameIndex]/volumeLength)
-                dimY = int(voxelsLength[0]*filevoxels[tempNameIndex]/volumeLength)
-                dimZ = int(voxelsLength[0]*filevoxels[tempNameIndex]/volumeLength)
+                dimY = int(voxelsLength[1]*filevoxels[tempNameIndex]/volumeLength)
+                dimZ = int(voxelsLength[2]*filevoxels[tempNameIndex]/volumeLength)
                 
                 totalvolumes = dimX*dimY*dimZ
                 # if totalvolumes > 10:
@@ -141,9 +165,9 @@ def process_single_volume(args):
     
     corner = np.zeros(3, dtype='int')
     # get random temp corner
-    corner[0] = random.randint(0, voxelsLength[0] - volumeLength/filevoxel) 
-    corner[1] = random.randint(0, voxelsLength[1] - volumeLength/filevoxel)
-    corner[2] = random.randint(0, voxelsLength[2] - volumeLength/filevoxel)
+    corner[0] = random.randint(0,int(voxelsLength[0]-volumeLength/filevoxel)) 
+    corner[1] = random.randint(0,int(voxelsLength[1]-volumeLength/filevoxel))
+    corner[2] = random.randint(0,int(voxelsLength[2]-volumeLength/filevoxel))
     
     # Call getstl function
     getstl(surf, filevoxel, temp_number, volumeLength, corner, surfaceSettings, savingOptions)
@@ -764,46 +788,21 @@ def calculate_centerline_properties(split_centerlines,tifvoxelsize,image, plane=
     return np.array(centerline_properties,dtype=float)
 
 def writeProperties(savingOptions, propertyNames, propertiesList):
+
     
-    if savingOptions['property_path'] == '':
-        savingOptions['property_path'] = 'propertyFile.txt' 
-    
-    
-    # Check if file exists to determine if we need to create a new name
-    file_exists = os.path.exists(savingOptions['property_path'])
-    
-    if re.search(r'_V(\d+)_', propertiesList[0]).group(1) == '0':
-        if file_exists:
-            # Create a new name for the file with '_copy' and increment if needed
-            base_name, ext = os.path.splitext(savingOptions['property_path'])
-            copy_fileName = f"{base_name}_copy{ext}"
-    
-            # If the file copy already exists, increment the number until a unique name is found
-            counter = 1
-            while os.path.exists(copy_fileName):
-                copy_fileName = f"{base_name}_copy{counter}{ext}"
-                counter += 1
-            
-            # Update fileName to the new copy file name
-            savingOptions['property_path'] = copy_fileName
-        
-        
-        # Open the new file in write mode to save the data
-        with open(savingOptions['property_path'], 'w') as f:
-            # Write headers
-            f.write('\t'.join(propertyNames) + '\n')
-            
-            # Write the property values
-            f.write('\t'.join(f"{float(x):.4f}" if (isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())) and abs(float(x)) >= 1e-4  
-                else f"{float(x):.4g}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())  
-                else str(x) for x in propertiesList) + '\n')
-    else:
-        with open(savingOptions['property_path'], '+a') as f:
+        with open(savingOptions['property_path'], "a+") as f:
+            f.seek(0)  # rewind to the beginning so we can read
+            content = f.read()
+
+            if "StlName" not in content:
+                # Write properties header at the end (file may be empty)
+                f.write('\t'.join(propertyNames) + '\n')
+                
             # Write the property values
             f.write('\t'.join(f"{float(x):.4f}" if (isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())) and abs(float(x)) >= 1e-4  
                 else f"{float(x):.4g}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())  
                 else str(x) for x in propertiesList) + '\n')  
-        
+    
 
 def run_voxel2stl():
     os.environ['KMP_DUPLICATE_LIB_OK']='True'
@@ -834,7 +833,7 @@ def run_voxel2stl():
         "stl_save": 0,
         "stl_path": '',  # Path where files will be saved or '' for current directory
         "property_save": 1,
-        "property_path": r'E:\LuisChacon\HERMES\RedRTV\RedRTV_600_sphere200.txt',  # Path where files will be saved or '' for current directory
+        "property_path": r'E:\LuisChacon\HERMES\RedRTV\RedRTV_700_sphere50.txt',  # Path where files will be saved or '' for current directory
         "property_options": {
             "min_max": 0,
             "surf_area": 1,
@@ -844,7 +843,7 @@ def run_voxel2stl():
             "fiber_diameter": 0,
             "fiber_diam_sphere": 0, # in um
             "pore_distribution": 1,
-            "pore_dist_sphere": 200, # in um
+            "pore_dist_sphere": 50, # in um
             "FiberAngle": 0,
             "FiberAnglePlane": 'YZ',
             "FiberLength": 0,
@@ -855,7 +854,7 @@ def run_voxel2stl():
     
     if croppingFlag == 'Regular':
         # If both are set to 0 Full volume will be prioritize
-        volumeLength = 600 # In um or enter 0 for Full volume
+        volumeLength = 700 # In um or enter 0 for Full volume
         numVolumes = 200 # Number of volumes or enter 0 for Lego
 
         cropSettings = filenames, filevoxels, numVolumes, volumeLength
