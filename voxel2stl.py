@@ -113,9 +113,9 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
                             
                             corner = np.zeros(3, dtype='int')
                             # get random temp corner
-                            corner[0] = random.randint(0,int(voxelsLength[0]-volumeLength)) 
-                            corner[1] = random.randint(0,int(voxelsLength[1]-volumeLength))
-                            corner[2] = random.randint(0,int(voxelsLength[2]-volumeLength))
+                            corner[0] = random.randint(0,int(voxelsLength[0]-volumeLength/filevoxels[tempNameIndex])) 
+                            corner[1] = random.randint(0,int(voxelsLength[1]-volumeLength/filevoxels[tempNameIndex]))
+                            corner[2] = random.randint(0,int(voxelsLength[2]-volumeLength/filevoxels[tempNameIndex]))
                             # center crop
                             # corner[0] = (voxelsLength[0]-volumeLength)/2 #random.randint(0,voxelsLength[0]-volumeLength) 
                             # corner[1] = (voxelsLength[1]-volumeLength)/2 #random.randint(0,voxelsLength[1]-volumeLength)
@@ -141,9 +141,9 @@ def process_single_volume(args):
     
     corner = np.zeros(3, dtype='int')
     # get random temp corner
-    corner[0] = random.randint(0, voxelsLength[0] - volumeLength) 
-    corner[1] = random.randint(0, voxelsLength[1] - volumeLength)
-    corner[2] = random.randint(0, voxelsLength[2] - volumeLength)
+    corner[0] = random.randint(0, voxelsLength[0] - volumeLength/filevoxel) 
+    corner[1] = random.randint(0, voxelsLength[1] - volumeLength/filevoxel)
+    corner[2] = random.randint(0, voxelsLength[2] - volumeLength/filevoxel)
     
     # Call getstl function
     getstl(surf, filevoxel, temp_number, volumeLength, corner, surfaceSettings, savingOptions)
@@ -473,6 +473,11 @@ def getPoreDistribution(image_volume, tifvoxelsize, sphereSize):
     # Detect local maxima
     local_maxima_coords = peak_local_max(distance_transform, min_distance=int(0.5*sphereSize/tifvoxelsize), labels=image_volume.astype(int))
     
+    if np.max(distance_transform) > image_volume.shape[0]/2:
+        print('something wrong!', np.max(distance_transform), '>', image_volume.shape[0]/2)
+        tiff.imwrite('E:\LuisChacon\HERMES\RedRTV\distancemap.tif', distance_transform.astype(np.float32),imagej=True)
+        print()
+
     # Measure diameters
     pore_diameters = []
     
@@ -829,7 +834,7 @@ def run_voxel2stl():
         "stl_save": 0,
         "stl_path": '',  # Path where files will be saved or '' for current directory
         "property_save": 1,
-        "property_path": r'E:\LuisChacon\HERMES\RedRTV\RedRTV_800.txt',  # Path where files will be saved or '' for current directory
+        "property_path": r'E:\LuisChacon\HERMES\RedRTV\RedRTV_600_sphere200.txt',  # Path where files will be saved or '' for current directory
         "property_options": {
             "min_max": 0,
             "surf_area": 1,
@@ -839,7 +844,7 @@ def run_voxel2stl():
             "fiber_diameter": 0,
             "fiber_diam_sphere": 0, # in um
             "pore_distribution": 1,
-            "pore_dist_sphere": 100, # in um
+            "pore_dist_sphere": 200, # in um
             "FiberAngle": 0,
             "FiberAnglePlane": 'YZ',
             "FiberLength": 0,
@@ -850,7 +855,7 @@ def run_voxel2stl():
     
     if croppingFlag == 'Regular':
         # If both are set to 0 Full volume will be prioritize
-        volumeLength = 500 # In um or enter 0 for Full volume
+        volumeLength = 600 # In um or enter 0 for Full volume
         numVolumes = 200 # Number of volumes or enter 0 for Lego
 
         cropSettings = filenames, filevoxels, numVolumes, volumeLength
