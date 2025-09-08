@@ -21,6 +21,30 @@ import networkx as nx
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
+
+    if savingOptions['property_save']:
+        if savingOptions['property_path'] == '':
+            savingOptions['property_path'] = 'propertyFile.txt' 
+        
+        # Check if file exists to determine if we need to create a new name     
+        if os.path.exists(savingOptions['property_path']):
+            # Create a new name for the file with '_copy' and increment if needed
+            base_name, ext = os.path.splitext(savingOptions['property_path'])
+            copy_fileName = f"{base_name}_copy{ext}"
+    
+            # If the file copy already exists, increment the number until a unique name is found
+            counter = 1
+            while os.path.exists(copy_fileName):
+                copy_fileName = f"{base_name}_copy{counter}{ext}"
+                counter += 1
+            
+            # Update fileName to the new copy file name
+            savingOptions['property_path'] = copy_fileName
+        
+        
+        # Open the new file in write mode to save the data when computed
+        with open(savingOptions['property_path'], 'w') as f:
+            pass
     
     if croppingFlag == 'Regular':
         filenames, filevoxels, numVolumes, volumeLength = cropSettings
@@ -764,45 +788,15 @@ def calculate_centerline_properties(split_centerlines,tifvoxelsize,image, plane=
     return np.array(centerline_properties,dtype=float)
 
 def writeProperties(savingOptions, propertyNames, propertiesList):
-    
-    if savingOptions['property_path'] == '':
-        savingOptions['property_path'] = 'propertyFile.txt' 
-    
-    
-    # Check if file exists to determine if we need to create a new name
-    file_exists = os.path.exists(savingOptions['property_path'])
-    
-    if re.search(r'_V(\d+)_', propertiesList[0]).group(1) == '0':
-        if file_exists:
-            # Create a new name for the file with '_copy' and increment if needed
-            base_name, ext = os.path.splitext(savingOptions['property_path'])
-            copy_fileName = f"{base_name}_copy{ext}"
-    
-            # If the file copy already exists, increment the number until a unique name is found
-            counter = 1
-            while os.path.exists(copy_fileName):
-                copy_fileName = f"{base_name}_copy{counter}{ext}"
-                counter += 1
-            
-            # Update fileName to the new copy file name
-            savingOptions['property_path'] = copy_fileName
-        
-        
-        # Open the new file in write mode to save the data
-        with open(savingOptions['property_path'], 'w') as f:
-            # Write headers
-            f.write('\t'.join(propertyNames) + '\n')
-            
-            # Write the property values
-            f.write('\t'.join(f"{float(x):.4f}" if (isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())) and abs(float(x)) >= 1e-4  
-                else f"{float(x):.4g}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())  
-                else str(x) for x in propertiesList) + '\n')
-    else:
-        with open(savingOptions['property_path'], '+a') as f:
-            # Write the property values
-            f.write('\t'.join(f"{float(x):.4f}" if (isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())) and abs(float(x)) >= 1e-4  
-                else f"{float(x):.4g}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())  
-                else str(x) for x in propertiesList) + '\n')  
+
+    with open(savingOptions['property_path'], '+a') as f:
+        # Write properties header
+        f.write('\t'.join(propertyNames) + '\n')
+
+        # Write the property values
+        f.write('\t'.join(f"{float(x):.4f}" if (isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())) and abs(float(x)) >= 1e-4  
+            else f"{float(x):.4g}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())  
+            else str(x) for x in propertiesList) + '\n')  
         
 
 def run_voxel2stl():
