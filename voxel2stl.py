@@ -16,9 +16,13 @@ import os
 from scipy.ndimage import distance_transform_edt
 from skimage.feature import peak_local_max
 from pathlib import Path
+import subprocess
+import sys
 import re
 import networkx as nx
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import pymeshlab as ml
+import io, contextlib
 
 def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
 
@@ -102,7 +106,7 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
             else:
                 volumes_to_process = numVolumes
 
-                if volumes_to_process > 5:  # Only parallelize if worth it
+                if volumes_to_process > 1000:  # Only parallelize if worth it
                     print(f'Processing {volumes_to_process} random volumes in parallel for {surf}...')
                     
                     with ProcessPoolExecutor(max_workers=max_workers) as executor:
@@ -334,16 +338,6 @@ def stlSmoothing(FileName, vertices, faces, surfaceSettings ):
     # print('Finish saving',basestl)
     
     # Apply filter iteration i
-    if surfaceSettings['RemoveIslandsFlag']: 
-        ms = remove_floating_islands_Stl(vertices,faces)
-        removeIsland = '_NI'
-        mesh = ms.current_mesh()
-        vertices = mesh.vertex_matrix()
-        faces = mesh.face_matrix()
-        
-    else:
-        removeIsland = ''
-
     if surfaceSettings['laplacianFlag']:
         # Load mesh from vertices and faces
         trimesh_mesh = loadMeshTrimesh(vertices,faces)
@@ -356,13 +350,24 @@ def stlSmoothing(FileName, vertices, faces, surfaceSettings ):
         filterName = '_screened_poisson'+str(surfaceSettings['ScreenedPoisson_iter'])
         # Load mesh 
         ms = loadMeshPymeshlab(vertices,faces)
-        ms.apply_filter('generate_surface_reconstruction_screened_poisson', depth=surfaceSettings['ScreenedPoisson_iter'], preclean=True)
+        if version == "2021.10":
+            ms.apply_filter('surface_reconstruction_screened_poisson', depth=surfaceSettings['ScreenedPoisson_iter'], preclean=True)
+        else:
+            ms.apply_filter('generate_surface_reconstruction_screened_poisson', depth=surfaceSettings['ScreenedPoisson_iter'], preclean=True)
         mesh = ms.current_mesh()
         vertices = mesh.vertex_matrix()
         faces = mesh.face_matrix() 
     else:
         filterName = ''
     
+    if surfaceSettings['RemoveIslandsFlag']: 
+        ms = remove_floating_islands_Stl(vertices,faces)
+        removeIsland = '_NI'
+        mesh = ms.current_mesh()
+        vertices = mesh.vertex_matrix()
+        faces = mesh.face_matrix()
+    else:
+        removeIsland = ''
         
     FileName = FileName+filterName+removeIsland
     
@@ -372,7 +377,6 @@ def loadMeshTrimesh(vertices,faces):
     return trimesh.Trimesh(vertices=vertices, faces=faces)
 
 def loadMeshPymeshlab(vertices,faces):
-    import pymeshlab as ml
     
     # Create meshLab mesh from vertices and faces
     meshTarget = ml.Mesh(vertices,faces) 
@@ -390,13 +394,13 @@ def remove_floating_islands_Stl(vertices,faces):
     ms = loadMeshPymeshlab(vertices,faces)
 
     # Compute connected components and select small components for deletion
-    ms.apply_filter('compute_selection_by_small_disconnected_components_per_face',nbfaceratio=1)
-
-    # Delete the selected small components
-    ms.apply_filter('meshing_remove_selected_vertices_and_faces')
-    mesh = ms.current_mesh()
-    mesh1 = trimesh.Trimesh(vertices=mesh.vertex_matrix(), faces=mesh.face_matrix(), process=False)
-    print("Watertight?", mesh1.is_watertight)
+    if version == "2021.10":
+        ms.apply_filter('select_small_disconnected_component',nbfaceratio=1)
+        ms.apply_filter('delete_selected_faces_and_vertices')
+    else:
+        ms.apply_filter('compute_selection_by_small_disconnected_components_per_face',nbfaceratio=1)
+        # Delete the selected small components
+        ms.apply_filter('meshing_remove_selected_vertices_and_faces')
 
     return ms
 
@@ -412,13 +416,22 @@ def fixMesh(FileName,vertices,faces):
     # Load mesh 
     ms = loadMeshPymeshlab(vertices,faces)
     
-    ms.apply_filter('generate_surface_reconstruction_screened_poisson', depth=8, preclean=True)
-    ms.apply_filter('meshing_remove_null_faces')
-    ms.apply_filter('meshing_repair_non_manifold_edges') 
-    ms.apply_filter('meshing_repair_non_manifold_vertices')
-    ms.apply_filter('meshing_remove_duplicate_faces')
-    ms.apply_filter('meshing_remove_duplicate_vertices')
-    ms.apply_filter('meshing_re_orient_faces_coherently')
+    if version == "2021.10":
+        ms.apply_filter('surface_reconstruction_screened_poisson', depth=8, preclean=True)
+        ms.apply_filter('remove_zero_area_faces') 
+        ms.apply_filter('repair_non_manifold_edges') 
+        ms.apply_filter('repair_non_manifold_vertices_by_splitting')
+        ms.apply_filter('remove_duplicate_faces')
+        ms.apply_filter('remove_duplicate_vertices')
+        ms.apply_filter('re_orient_all_faces_coherentely')
+    else:
+        ms.apply_filter('generate_surface_reconstruction_screened_poisson', depth=8, preclean=True)
+        ms.apply_filter('meshing_remove_null_faces')
+        ms.apply_filter('meshing_repair_non_manifold_edges') 
+        ms.apply_filter('meshing_repair_non_manifold_vertices')
+        ms.apply_filter('meshing_remove_duplicate_faces')
+        ms.apply_filter('meshing_remove_duplicate_vertices')
+        ms.apply_filter('meshing_re_orient_faces_coherently')
 
     FileName = FileName+'_Fixed'
     print(FileName, 'fixed!')
@@ -504,7 +517,7 @@ def getPoreDistribution(image_volume, tifvoxelsize, sphereSize):
     
     if np.max(distance_transform) > image_volume.shape[0]/2:
         print('something wrong!', np.max(distance_transform), '>', image_volume.shape[0]/2)
-        tiff.imwrite('E:\LuisChacon\HERMES\RedRTV\distancemap.tif', distance_transform.astype(np.float32),imagej=True)
+        tiff.imwrite('.', distance_transform.astype(np.float32),imagej=True)
         print()
 
     # Measure diameters
@@ -825,9 +838,9 @@ def run_voxel2stl():
     croppingFlag = 'Regular' # 'Regular' or 'Corner'
     print(croppingFlag)
     
-    filenames = [r'E:\LuisChacon\HERMES\RedRTV\3275_RedRTV_Cropped_3.177714.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
+    filenames = [r'D0_0.9988.tif','D1_0.9988.tif'] # one or more Ex: ['file1.tif', 'file2.dat', ...]
     
-    filevoxels = [3.177714] # one or more correspondig to filenames Ex: [1, 1.8, ...]
+    filevoxels = [0.9988,0.9988] # one or more correspondig to filenames Ex: [1, 1.8, ...]
     
     # Saving Flags 1 or 0 for True or False, respectively
     savingOptions = {
@@ -835,19 +848,19 @@ def run_voxel2stl():
         "tiff_path": '', # Path where files will be saved or '' for current directory
         "voxel_save": 0,
         "voxel_path": '',  # Path where files will be saved or '' for current directory
-        "stl_save": 0,
+        "stl_save": 1,
         "stl_path": '',  # Path where files will be saved or '' for current directory
         "property_save": 1,
-        "property_path": r'E:\LuisChacon\HERMES\RedRTV\RedRTV_700_sphere50.txt',  # Path where files will be saved or '' for current directory
+        "property_path": '',  # Path where files will be saved or '' for current directory
         "property_options": {
-            "min_max": 0,
+            "min_max": 1,
             "surf_area": 1,
             "closed_volume": 1,
             "vol_by_area": 1,
             "porosity": 1,
             "fiber_diameter": 0,
             "fiber_diam_sphere": 0, # in um
-            "pore_distribution": 1,
+            "pore_distribution": 0,
             "pore_dist_sphere": 50, # in um
             "FiberAngle": 0,
             "FiberAnglePlane": 'YZ',
@@ -857,16 +870,35 @@ def run_voxel2stl():
     }
     print(savingOptions)
     
+    #CHECK PYMESHLAB VERSION
+    result = subprocess.run(
+    [sys.executable, "-c", "import pymeshlab; pymeshlab.print_pymeshlab_version()"],
+    stdout=subprocess.PIPE,
+    stderr=subprocess.PIPE,
+    universal_newlines=True  # This works in older Python versions
+    )
+    version_output = result.stdout
+
+    # Extract version
+    match = re.search(r'PyMeshLab (\d+\.\d+)', version_output)
+    global version
+    if match:
+        version = match.group(1)
+        print(f"Version: {version}")
+    else:
+        print("Pymeshlab is NOT 2021")
+    
+
     if croppingFlag == 'Regular':
         # If both are set to 0 Full volume will be prioritize
-        volumeLength = 700 # In um or enter 0 for Full volume
-        numVolumes = 200 # Number of volumes or enter 0 for Lego
+        volumeLength = 100 # In um or enter 0 for Full volume
+        numVolumes = 10 # Number of volumes or enter 0 for Lego
 
         cropSettings = filenames, filevoxels, numVolumes, volumeLength
         print(cropSettings)
         
     elif croppingFlag == 'Corners':
-        volumeLength = 1000 # In um
+        volumeLength = 100 # In um
         
         cornersMTX = [(1,2,3), (3,2,6)] # list of tuple coordinates in the format (x,y,z)
         
