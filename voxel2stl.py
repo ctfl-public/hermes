@@ -18,14 +18,33 @@ from skimage.feature import peak_local_max
 from pathlib import Path
 import re
 import networkx as nx
-
-from trimesh.repair import (
-    fill_holes,
-    fix_winding,
-    fix_normals,
-)
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
+
+    if savingOptions['property_save']:
+        if savingOptions['property_path'] == '':
+            savingOptions['property_path'] = 'propertyFile.txt' 
+        
+        # Check if file exists to determine if we need to create a new name     
+        if os.path.exists(savingOptions['property_path']):
+            # Create a new name for the file with '_copy' and increment if needed
+            base_name, ext = os.path.splitext(savingOptions['property_path'])
+            copy_fileName = f"{base_name}_copy{ext}"
+    
+            # If the file copy already exists, increment the number until a unique name is found
+            counter = 1
+            while os.path.exists(copy_fileName):
+                copy_fileName = f"{base_name}_copy{counter}{ext}"
+                counter += 1
+            
+            # Update fileName to the new copy file name
+            savingOptions['property_path'] = copy_fileName
+        
+        
+        # Open the new file in write mode to save the data when computed
+        with open(savingOptions['property_path'], 'w') as f:
+            pass
     
     if croppingFlag == 'Regular':
         filenames, filevoxels, numVolumes, volumeLength = cropSettings
@@ -45,6 +64,7 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
                 tempMTX[tempNameIndex] += 1
      
     temp_number = 0
+    max_workers = min(8, (os.cpu_count() or 1))  # Cap at 8 workers
     for surf in filenames:
         tempNameIndex = filenames.index(surf)
         
@@ -52,7 +72,7 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
         image_volume = loadData(surf)
                 
         # max voxel length in x, y, and z
-        voxelsLegth = (image_volume.shape[0],image_volume.shape[1],image_volume.shape[2])
+        voxelsLength = (image_volume.shape[0],image_volume.shape[1],image_volume.shape[2])
         
         if croppingFlag == 'Regular':
             if volumeLength == 0: # create stl from all the volume
@@ -63,9 +83,9 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
             
             elif numVolumes == 0:
                 # Number of volumes in each direction
-                dimX = int(voxelsLegth[0]*filevoxels[tempNameIndex]/volumeLength)
-                dimY = int(voxelsLegth[0]*filevoxels[tempNameIndex]/volumeLength)
-                dimZ = int(voxelsLegth[0]*filevoxels[tempNameIndex]/volumeLength)
+                dimX = int(voxelsLength[0]*filevoxels[tempNameIndex]/volumeLength)
+                dimY = int(voxelsLength[1]*filevoxels[tempNameIndex]/volumeLength)
+                dimZ = int(voxelsLength[2]*filevoxels[tempNameIndex]/volumeLength)
                 
                 totalvolumes = dimX*dimY*dimZ
                 # if totalvolumes > 10:
@@ -80,36 +100,79 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
                     temp_number += 1
                     
             else:
-                for times in range(tempMTX[tempNameIndex]):
-                    
-                    print('corner',times,'of',surf)
-                    if numVolumes != 0:
-                         
-                        # name of iteration volume
-                        # tempName = filenames[:-4]+'_V%i'%(temp)
-                        
-                        corner = np.zeros(3, dtype='int')
-                        # get random temp corner
-                        for i in range(3):
-                            #if voxelsLegth[i] < volumeLength:
-                            #    raise ValueError(f"volumeLength ({volumeLength}) is larger than voxelsLength[{i}] ({voxelsLegth[i]})")
-                            corner[i] = random.randint(0, int(voxelsLegth[i]))
-                        #corner[0] = random.randint(0,int(voxelsLegth[0]-volumeLength)) 
-                        #corner[1] = random.randint(0,int(voxelsLegth[1]-volumeLength))
-                        #corner[2] = random.randint(0,int(voxelsLegth[2]-volumeLength))
-                        # center crop
-                        #corner[0] = (voxelsLegth[0]-volumeLength)/2 #random.randint(0,voxelsLegth[0]-volumeLength) 
-                        #corner[1] = (voxelsLegth[1]-volumeLength)/2 #random.randint(0,voxelsLegth[1]-volumeLength)
-                        #corner[2] = (voxelsLegth[2]-volumeLength)/2 #random.randint(0,voxelsLegth[2]-volumeLength)
+                volumes_to_process = numVolumes
 
+                if volumes_to_process > 5:  # Only parallelize if worth it
+                    print(f'Processing {volumes_to_process} random volumes in parallel for {surf}...')
+                    
+                    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                        # Submit all tasks
+                        futures = []
+                        for i in range(volumes_to_process):
+                            seed = random.randint(0, 1000000) + i
+                            future = executor.submit(process_single_volume, 
+                                                   (surf, filevoxels[tempNameIndex], temp_number + i,
+                                                    volumeLength, voxelsLength, seed, surfaceSettings, savingOptions))
+                            futures.append(future)
                         
-                        getstl(surf, filevoxels[tempNameIndex], temp_number,volumeLength, corner, surfaceSettings, savingOptions)
-                        temp_number += 1
+                        # Wait for completion and handle results
+                        for future in as_completed(futures):
+                            try:
+                                result = future.result()
+                                print(result)
+                            except Exception as e:
+                                print(f"Error processing volume: {e}")
+                    
+                    temp_number += volumes_to_process
+
+                else:
+                    # Process sequentially for small number of volumes
+                    for times in range(tempMTX[tempNameIndex]):
+                        
+                        print('corner',times,'of',surf)
+                        if numVolumes != 0:
+                            
+                            # name of iteration volume
+                            # tempName = filenames[:-4]+'_V%i'%(temp)
+                            
+                            corner = np.zeros(3, dtype='int')
+                            # get random temp corner
+                            corner[0] = random.randint(0,int(voxelsLength[0]-volumeLength/filevoxels[tempNameIndex])) 
+                            corner[1] = random.randint(0,int(voxelsLength[1]-volumeLength/filevoxels[tempNameIndex]))
+                            corner[2] = random.randint(0,int(voxelsLength[2]-volumeLength/filevoxels[tempNameIndex]))
+                            # center crop
+                            # corner[0] = (voxelsLength[0]-volumeLength)/2 #random.randint(0,voxelsLength[0]-volumeLength) 
+                            # corner[1] = (voxelsLength[1]-volumeLength)/2 #random.randint(0,voxelsLength[1]-volumeLength)
+                            # corner[2] = (voxelsLength[2]-volumeLength)/2 #random.randint(0,voxelsLength[2]-volumeLength)
+
+                            
+                            getstl(surf, filevoxels[tempNameIndex], temp_number,volumeLength, corner, surfaceSettings, savingOptions)
+                            temp_number += 1
 
         elif croppingFlag == 'Corners':
             for corner in cornersMTX:
                 getstl(surf, filevoxels[tempNameIndex], temp_number,volumeLength, corner, surfaceSettings, savingOptions)
                 temp_number += 1
+
+def process_single_volume(args):
+    """
+    Worker function to process a single volume in parallel.
+    """
+    surf, filevoxel, temp_number, volumeLength, voxelsLength, seed, surfaceSettings, savingOptions = args
+    
+    # Set random seed for reproducibility in parallel processing
+    random.seed(seed)
+    
+    corner = np.zeros(3, dtype='int')
+    # get random temp corner
+    corner[0] = random.randint(0,int(voxelsLength[0]-volumeLength/filevoxel)) 
+    corner[1] = random.randint(0,int(voxelsLength[1]-volumeLength/filevoxel))
+    corner[2] = random.randint(0,int(voxelsLength[2]-volumeLength/filevoxel))
+    
+    # Call getstl function
+    getstl(surf, filevoxel, temp_number, volumeLength, corner, surfaceSettings, savingOptions)
+    
+    return f"Processed corner {temp_number} of {surf}"
 
 def loadData(surf):
     if surf.endswith('.tif'):
@@ -169,8 +232,15 @@ def getstl(surfacename, tifvoxelsize, temp_number,volumeLength, corner, surfaceS
     # Perform smoothing 
     tempName, vertices, faces = stlSmoothing(tempName, vertices, faces, surfaceSettings)   
     
+    # Check mesh 
+    volume_check = checkMesh(vertices, faces)
+
+    if not volume_check:
+        print('%s needs fixing!'%tempName)
+        tempName, vertices, faces = fixMesh(tempName, vertices, faces)
+
     if savingOptions['property_save']:
-        computeProperties(os.path.basename(tempName)+'.stl', vertices,faces,temp_volume,tifvoxelsize,savingOptions)
+        computeProperties(os.path.basename(tempName)+'.stl', vertices,faces,temp_volume,tifvoxelsize,savingOptions,surfacename)
         
     if savingOptions['stl_save']:
         trimesh_mesh = loadMeshTrimesh(vertices,faces)
@@ -241,7 +311,7 @@ def writeChenFormat(tempName,binary_volume,tifvoxelsize):
 def getMesh(binary_volume,length,voxel_size):
     
     # Create a mesh using the marching cubes algorithm
-    vertices, faces, _, _ = measure.marching_cubes(binary_volume)  ##add the parallel marching cubes here
+    vertices, faces, _, _ = measure.marching_cubes(binary_volume, allow_degenerate=False, method='lewiner')  ##add the parallel marching cubes here
     
     # Swap x and z to make it match the tif
     # Indices of the columns you want to swap
@@ -303,9 +373,10 @@ def loadMeshTrimesh(vertices,faces):
 
 def loadMeshPymeshlab(vertices,faces):
     import pymeshlab as ml
-    # Create meshLab mesh from vertices and faces
-    meshTarget = ml.Mesh(vertices,faces)
     
+    # Create meshLab mesh from vertices and faces
+    meshTarget = ml.Mesh(vertices,faces) 
+
     # Create a MeshSet object
     ms = ml.MeshSet(verbose=True)
     
@@ -329,7 +400,33 @@ def remove_floating_islands_Stl(vertices,faces):
 
     return ms
 
-def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savingOptions):
+def checkMesh(vertices,faces):
+    mesh = loadMeshTrimesh(vertices,faces)
+    manifoldMesh =  mesh.is_volume
+    # watertightMesh = mesh.is_watertight
+    
+    return manifoldMesh
+
+def fixMesh(FileName,vertices,faces):
+    print('trying to fix it', FileName)
+    # Load mesh 
+    ms = loadMeshPymeshlab(vertices,faces)
+    
+    ms.apply_filter('generate_surface_reconstruction_screened_poisson', depth=8, preclean=True)
+    ms.apply_filter('meshing_remove_null_faces')
+    ms.apply_filter('meshing_repair_non_manifold_edges') 
+    ms.apply_filter('meshing_repair_non_manifold_vertices')
+    ms.apply_filter('meshing_remove_duplicate_faces')
+    ms.apply_filter('meshing_remove_duplicate_vertices')
+    ms.apply_filter('meshing_re_orient_faces_coherently')
+
+    FileName = FileName+'_Fixed'
+    print(FileName, 'fixed!')
+    # ms.save_current_mesh(FileName+'.stl', binary=False)
+    
+    return FileName, ms.current_mesh().vertex_matrix(), ms.current_mesh().face_matrix()
+
+def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savingOptions,surfacename):
     propertyList = [stlName]
     propertyNames = ['StlName']  # To store the names of selected properties
 
@@ -365,19 +462,19 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
         propertyNames.append("Porosity")
 
     if savingOptions['property_options']['fiber_diameter']:
-        meanDiameter, stdDiameter = getDiamter(temp_volume, tifvoxelsize,savingOptions['property_options']['fiber_diam_sphere'])
+        meanDiameter, stdDiameter = getDiamter(temp_volume, tifvoxelsize, savingOptions['property_options']['fiber_diam_sphere'])
         propertyList.append(meanDiameter)
         propertyList.append(stdDiameter)
         propertyNames.extend(["fiber_diameter_Mean", "fiber_diameter_Std"])
 
     if savingOptions['property_options']['pore_distribution']:
-        pore_diameter = getPoreDistribution(temp_volume, tifvoxelsize)
-        propertyList.append(pore_diameter)
-        propertyNames.append("poredistribution")
-    
+        meanPore, stdPore = getPoreDistribution(temp_volume, tifvoxelsize, savingOptions['property_options']['pore_dist_sphere'])
+        propertyList.append(meanPore)
+        propertyList.append(stdPore)
+        propertyNames.extend(["meanPore", "stdPore"])
     
     if savingOptions['property_options']['FiberAngle'] or savingOptions['property_options']['FiberLength']:
-        azimuthMean, elevationMean, lengthMean, azimuthSTD, elevationSTD,lengthSTD  = analyseCenterLine(temp_volume,tifvoxelsize,savingOptions['property_options']['FiberAnglePlane'])
+        azimuthMean, elevationMean, lengthMean, azimuthSTD, elevationSTD,lengthSTD  = analyzeCenterLine(temp_volume,tifvoxelsize,surfacename,savingOptions['property_options']['FiberAnglePlane'])
         if savingOptions['property_options']['FiberAngle']:
             propertyList.append(azimuthMean)
             propertyNames.append("MeanAzimuthAngle")
@@ -395,12 +492,42 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
         
     writeProperties(savingOptions, propertyNames, propertyList)
 
+def getPoreDistribution(image_volume, tifvoxelsize, sphereSize):
+    # Invert image_volume
+    image_volume = (image_volume == 0).astype(int)
+
+    # Distance transform
+    distance_transform = distance_transform_edt(image_volume)
+    
+    # Detect local maxima
+    local_maxima_coords = peak_local_max(distance_transform, min_distance=int(0.5*sphereSize/tifvoxelsize), labels=image_volume.astype(int))
+    
+    if np.max(distance_transform) > image_volume.shape[0]/2:
+        print('something wrong!', np.max(distance_transform), '>', image_volume.shape[0]/2)
+        tiff.imwrite('E:\LuisChacon\HERMES\RedRTV\distancemap.tif', distance_transform.astype(np.float32),imagej=True)
+        print()
+
+    # Measure diameters
+    pore_diameters = []
+    
+    for max_coords in local_maxima_coords:
+        distances = distance_transform[tuple(max_coords)]
+        pore_diameters.append(2 * np.max(distances))
+    
+    # Scale given voxel size
+    pore_diameters = np.multiply(pore_diameters,tifvoxelsize)-tifvoxelsize/2
+    
+    meanPore = np.mean(pore_diameters)
+    stdPore = np.std(pore_diameters)
+    
+    return meanPore, stdPore
+
 def getDiamter(image_volume,tifvoxelsize,sphereSize):
     # Distance transform
     distance_transform = distance_transform_edt(image_volume)
     
     # Detect local maxima
-    local_maxima_coords = peak_local_max(distance_transform, min_distance=int(sphereSize/2), labels=image_volume.astype(int))
+    local_maxima_coords = peak_local_max(distance_transform, min_distance=int(0.5*sphereSize/tifvoxelsize), labels=image_volume.astype(int))
     
     # Measure diameters
     fiber_diameters = []
@@ -417,7 +544,7 @@ def getDiamter(image_volume,tifvoxelsize,sphereSize):
     
     return meanDiameter, stdDiameter
 
-def analyseCenterLine(image,tifvoxelsize,plane='XY'):
+def analyzeCenterLine(image,tifvoxelsize,surfacename,plane='XY'):
     
     # Preprocess the image
     # Apply Gaussian filter with sigma=2
@@ -429,7 +556,7 @@ def analyseCenterLine(image,tifvoxelsize,plane='XY'):
     # Skeletonize the image
     skeleton = morphology.skeletonize(image_smoothed)
     
-    # tiff.imwrite(fileName[:-4]+'_skeleton.tif', skeleton.astype(np.uint16),imagej=True)
+    tiff.imwrite(surfacename[:-4]+'_skeleton.tif', skeleton.astype(np.uint16),imagej=True)
     
     # Extract centerline coordinates
     coords = np.column_stack(np.where(skeleton > 0))  # Get (Z, Y, X) coordinates
@@ -479,7 +606,7 @@ def analyseCenterLine(image,tifvoxelsize,plane='XY'):
     # plot_centerlines_and_voxels(image, split_centerlines, labeled_image)
     
     # Compute angles
-    centerline_properties = calculate_centerline_properties(split_centerlines,tifvoxelsize,plane)
+    centerline_properties = calculate_centerline_properties(split_centerlines,tifvoxelsize,image,plane)
     
     azimuthMean,elevationMean,lengthMean = np.mean(centerline_properties,axis=0)
     azimuthSTD, elevationSTD,lengthSTD = np.std(centerline_properties, axis=0, ddof=0)
@@ -594,20 +721,23 @@ def split_and_order_centerlines(graph, branch_nodes, steps=4):
 
     return split_centerlines, G
 
-def calculate_centerline_properties(split_centerlines,tifvoxelsize, plane='XY'):
+def calculate_centerline_properties(split_centerlines,tifvoxelsize,image, plane='XY', step_size=4):
     """
-    Calculates the average azimuth and elevation angles along with length 
-    for each centerline based on ordered points. The plane parameter specifies 
-    from which plane the angles are computed.
+    Calculates average azimuth, elevation, length, and distance to background 
+    for endpoints of each centerline.
 
     Parameters:
         split_centerlines (list of lists): Ordered centerlines, each a list of (x, y, z) tuples.
-        plane (str): The reference plane for azimuth and elevation calculation. 
-                     Options: 'xy', 'xz', 'yz'.
+        tifvoxelsize (float): Size of one voxel in real-world units.
+        image (ndarray): 3D image array where background is 0.
+        plane (str): Plane used for azimuth/elevation computation ('XY', 'XZ', 'YZ').
 
     Returns:
-        list of tuples: [(avg_azimuth, avg_elevation, length) for each centerline]
+        list of dicts: Each dict contains avg_azimuth, avg_elevation, length, 
+                       first_point_distance, last_point_distance.
     """
+    # Compute distance transform from background (0 == background)
+    dist_transform = distance_transform_edt(image > 0)
     centerline_properties = []
 
     for centerline in split_centerlines:
@@ -615,9 +745,9 @@ def calculate_centerline_properties(split_centerlines,tifvoxelsize, plane='XY'):
         length = 0.0
         
         # Compute direction vectors and segment lengths
-        for i in range(len(centerline) - 1):
+        for i in range(0, len(centerline) - step_size, step_size):
             p1 = np.array(centerline[i])  
-            p2 = np.array(centerline[i + 1])
+            p2 = np.array(centerline[min(i + step_size, len(centerline) - 1)])
             vec = p2 - p1  
             vectors.append(vec)
             length += np.linalg.norm(vec)*tifvoxelsize  # Sum Euclidean distances
@@ -648,52 +778,36 @@ def calculate_centerline_properties(split_centerlines,tifvoxelsize, plane='XY'):
             avg_elevation = np.arcsin(mean_vector[2] / norm)  # φ (tilt in X)
         else:
             raise ValueError("Invalid plane option. Choose from 'XY', 'XZ', or 'YZ'.")
+        
+        # Get scaled distance to background for first and last points
+        first_point = tuple(np.round(centerline[0]).astype(int))
+        last_point = tuple(np.round(centerline[-1]).astype(int))
+
+        first_distance = dist_transform[first_point] * tifvoxelsize
+        last_distance = dist_transform[last_point] * tifvoxelsize
+        
+        length += first_distance + last_distance
 
         centerline_properties.append([float(np.degrees(avg_azimuth)), float(np.degrees(avg_elevation)), float(length)])
 
     return np.array(centerline_properties,dtype=float)
 
 def writeProperties(savingOptions, propertyNames, propertiesList):
+
     
-    if savingOptions['property_path'] == '':
-        savingOptions['property_path'] = 'propertyFile.txt' 
-    
-    
-    # Check if file exists to determine if we need to create a new name
-    file_exists = os.path.exists(savingOptions['property_path'])
-    
-    if re.search(r'_V(\d+)_', propertiesList[0]).group(1) == '0':
-        if file_exists:
-            # Create a new name for the file with '_copy' and increment if needed
-            base_name, ext = os.path.splitext(savingOptions['property_path'])
-            copy_fileName = f"{base_name}_copy{ext}"
-    
-            # If the file copy already exists, increment the number until a unique name is found
-            counter = 1
-            while os.path.exists(copy_fileName):
-                copy_fileName = f"{base_name}_copy{counter}{ext}"
-                counter += 1
-            
-            # Update fileName to the new copy file name
-            savingOptions['property_path'] = copy_fileName
-        
-        
-        # Open the new file in write mode to save the data
-        with open(savingOptions['property_path'], 'w') as f:
-            # Write headers
-            f.write('\t'.join(propertyNames) + '\n')
-            
-            # Write the property values
-            f.write('\t'.join(f"{float(x):.4f}" if (isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())) and abs(float(x)) >= 1e-4  
-                else f"{float(x):.4g}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())  
-                else str(x) for x in propertiesList) + '\n')
-    else:
-        with open(savingOptions['property_path'], '+a') as f:
+        with open(savingOptions['property_path'], "a+") as f:
+            f.seek(0)  # rewind to the beginning so we can read
+            content = f.read()
+
+            if "StlName" not in content:
+                # Write properties header at the end (file may be empty)
+                f.write('\t'.join(propertyNames) + '\n')
+                
             # Write the property values
             f.write('\t'.join(f"{float(x):.4f}" if (isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())) and abs(float(x)) >= 1e-4  
                 else f"{float(x):.4g}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())  
                 else str(x) for x in propertiesList) + '\n')  
-        
+    
 
 def run_voxel2stl():
     os.environ['KMP_DUPLICATE_LIB_OK']='True'
@@ -711,9 +825,9 @@ def run_voxel2stl():
     croppingFlag = 'Regular' # 'Regular' or 'Corner'
     print(croppingFlag)
     
-    filenames = [r'S0_1.06923_2307_NI8.tif','S1_0.8580_1518_NI8.tif'] # one or more Ex: ['file1.tif', 'file2.dat', ...]
+    filenames = [r'E:\LuisChacon\HERMES\RedRTV\3275_RedRTV_Cropped_3.177714.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
     
-    filevoxels = [1.06923,0.8580] # one or more correspondig to filenames Ex: [1, 1.8, ...]
+    filevoxels = [3.177714] # one or more correspondig to filenames Ex: [1, 1.8, ...]
     
     # Saving Flags 1 or 0 for True or False, respectively
     savingOptions = {
@@ -721,20 +835,20 @@ def run_voxel2stl():
         "tiff_path": '', # Path where files will be saved or '' for current directory
         "voxel_save": 0,
         "voxel_path": '',  # Path where files will be saved or '' for current directory
-        "stl_save": 1,
+        "stl_save": 0,
         "stl_path": '',  # Path where files will be saved or '' for current directory
-        "property_save": 0,
-        "property_path": '',  # Path where files will be saved or '' for current directory
+        "property_save": 1,
+        "property_path": r'E:\LuisChacon\HERMES\RedRTV\RedRTV_700_sphere50.txt',  # Path where files will be saved or '' for current directory
         "property_options": {
             "min_max": 0,
-            "surf_area": 0,
-            "closed_volume": 0,
-            "vol_by_area": 0,
+            "surf_area": 1,
+            "closed_volume": 1,
+            "vol_by_area": 1,
             "porosity": 1,
             "fiber_diameter": 0,
-            "fiber_diam_sphere": 10,
-            "pore_distribution": 0,
-            "pore_dist_sphere": 50,
+            "fiber_diam_sphere": 0, # in um
+            "pore_distribution": 1,
+            "pore_dist_sphere": 50, # in um
             "FiberAngle": 0,
             "FiberAnglePlane": 'YZ',
             "FiberLength": 0,
@@ -745,8 +859,8 @@ def run_voxel2stl():
     
     if croppingFlag == 'Regular':
         # If both are set to 0 Full volume will be prioritize
-        volumeLength = 200 # In um or enter 0 for Full volume
-        numVolumes = 10 # Number of volumes or enter 0 for Lego
+        volumeLength = 700 # In um or enter 0 for Full volume
+        numVolumes = 200 # Number of volumes or enter 0 for Lego
 
         cropSettings = filenames, filevoxels, numVolumes, volumeLength
         print(cropSettings)
@@ -769,4 +883,6 @@ def run_voxel2stl():
     voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions)
 
 if __name__ == '__main__':
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(script_dir)
     run_voxel2stl()

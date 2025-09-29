@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QPushButton, QLabel, QFileDialog,
     QTableWidget, QTableWidgetItem, QHeaderView,QLineEdit, QCheckBox,
     QWidget, QMessageBox, QComboBox, QSlider, QGraphicsView, QGraphicsScene,
-    QVBoxLayout, QSizePolicy, QProgressBar
+    QVBoxLayout, QSizePolicy, QProgressBar, QDialog
  )
 from PyQt5.QtGui import QDoubleValidator, QIntValidator, QRegularExpressionValidator
 from PyQt5.QtCore import QRegularExpression, QThread, pyqtSignal
@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 import os
 import numpy as np 
-import trimesh
+import trimesh 
 from skimage import measure, filters, morphology
 import imageio
 import random
@@ -42,22 +42,66 @@ import json
 import networkx as nx
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import matplotlib.pyplot as plt
+from matplotlib.widgets import RectangleSelector
+import pyvista as pv
+from pyvistaqt import BackgroundPlotter, QtInteractor
 
-class LoadingScreen(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle('Processing...')
-        self.setGeometry(100, 100, 300, 100)
+class VoxelRenderingWindow(QDialog):
+    def __init__(self, voxel_data, VoxelSizeX, VoxelSizeY, VoxelSizeZ, parent=None):
+        if VoxelSizeX == '':
+            VoxelSizeX = 1
+        else:
+            VoxelSizeX = int(VoxelSizeX)
+        if VoxelSizeY == '':
+            VoxelSizeY = 1
+        else:
+            VoxelSizeY = int(VoxelSizeY)
+        if VoxelSizeZ == '':
+            VoxelSizeZ = 1
+        else:
+            VoxelSizeZ = int(VoxelSizeZ)
+            
+        super().__init__(parent)
+        self.setWindowTitle("Voxel Rendering")
+        self.resize(800, 600)
+
+        layout = QVBoxLayout(self)
         
-        layout = QVBoxLayout()
-        self.label = QLabel('Processing image data...', self)
-        layout.addWidget(self.label)
+        # Convert voxel data to integer (0 or 1)
+        voxel_data_int = voxel_data.astype(int)
         
-        self.progress_bar = QProgressBar(self)
-        self.progress_bar.setRange(0, 0)  # Indeterminate progress
-        layout.addWidget(self.progress_bar)
+        # Convert voxel data to PyVista format
+        grid = pv.ImageData()
+        grid.dimensions = np.array(voxel_data_int.shape) + 1  # PyVista requires +1
+        grid.spacing = (VoxelSizeX, VoxelSizeY, VoxelSizeZ)  # Adjust voxel size if needed
+        grid.cell_data["values"] = voxel_data_int.flatten(order="F")  # Flatten for PyVista
         
+        # **Thresholding to remove zero-valued voxels**
+        thresholded_grid = grid.threshold(0.5)  # Keeps values > 0
+        
+        # **Extract the outer surface** (Required for smoothing)
+        surface = thresholded_grid.extract_surface()
+        
+        # Create a plotter using QtInteractor (to embed in PyQt5 window)
+        self.plotter = QtInteractor(self)
+        
+        # Add the smoothed volume to the plot
+        self.plotter.add_mesh(surface, show_edges=False, opacity=1.0, cmap="coolwarm")
+        
+        # Add axes to show X, Y, Z directions
+        self.plotter.show_axes()
+        
+        # Remove the scalar bar
+        self.plotter.remove_scalar_bar()
+        
+        # Layout for PyQt5 window
+        layout.addWidget(self.plotter.interactor)
         self.setLayout(layout)
+        
+    def closeEvent(self, event):
+        # Ensure that the plotter window is closed properly
+        self.plotter.close()
+        event.accept()
         
 class SegmentationThread(QThread):
     finished = pyqtSignal(np.ndarray, str, str, float)
@@ -70,11 +114,9 @@ class SegmentationThread(QThread):
         self.Blocksize = Blocksize
         self.minManual = minManual
         self.maxManual = maxManual
-        self.loading_screen = LoadingScreen()
+
         
     def run(self):
-        # Show the loading screen
-        self.loading_screen.show()
         minthreshold = ''
         maxthreshold = ''
         segmentation_mask = np.zeros_like(self.image_data, dtype=np.uint8)
@@ -159,8 +201,6 @@ class SegmentationThread(QThread):
             maxthreshold = self.maxManual
         
         porosity = np.sum(segmentation_mask == False) / segmentation_mask.size
-        # Hide the loading screen
-        self.loading_screen.hide()
         self.finished.emit(segmentation_mask, str(minthreshold), str(maxthreshold), porosity)
 
     def show_error_message(self, title, message):
@@ -395,6 +435,14 @@ class UI(QMainWindow):
         self.load_button = self.findChild(QPushButton, 'LoadTiffSegmentationpushButton')
         self.load_button.clicked.connect(self.load_tiff)
         
+        self.VoxelSizeX = self.findChild(QLineEdit, "VoxelSizeX")
+        self.VoxelSizeY = self.findChild(QLineEdit, "VoxelSizeY")
+        self.VoxelSizeZ = self.findChild(QLineEdit, "VoxelSizeZ")
+        
+        self.VoxelSizeX.setValidator(int_validator)
+        self.VoxelSizeY.setValidator(int_validator)
+        self.VoxelSizeZ.setValidator(int_validator)
+        
         self.file_labelSegmentation = self.findChild(QLabel, 'fileNameSegmentationlabel')
         
         self.slider = self.findChild(QSlider, 'CurrentPlanehorizontalSlider')
@@ -472,8 +520,56 @@ class UI(QMainWindow):
         self.btnIsodata.clicked.connect(lambda: self.run_segmentation("Isodata"))
         self.btnTriangle.clicked.connect(lambda: self.run_segmentation("Triangle"))
         self.btnManual.clicked.connect(lambda: self.run_segmentation("Manual"))
-    
+        
+        # Initialize cropping coordinates
+        self.xmin, self.xmax = None, None
+        self.ymin, self.ymax = None, None
+        self.zmin, self.zmax = None, None
+        
+        # Ensure they have valid values if None
+        self.validate_crop_coords()
+        
+        self.xmin_input = self.findChild(QLineEdit, "XminCroppinglineEdit")
+        self.xmax_input = self.findChild(QLineEdit, "XmaxCroppinglineEdit")
+        self.ymin_input = self.findChild(QLineEdit, "YminCroppinglineEdit")
+        self.ymax_input = self.findChild(QLineEdit, "YmaxCroppinglineEdit")
+        self.zmin_input = self.findChild(QLineEdit, "ZminCroppinglineEdit")
+        self.zmax_input = self.findChild(QLineEdit, "ZmaxCroppinglineEdit")
+        
+        self.xmin_input.textChanged.connect(self.update_crop_from_text)
+        self.xmax_input.textChanged.connect(self.update_crop_from_text)
+        self.ymin_input.textChanged.connect(self.update_crop_from_text)
+        self.ymax_input.textChanged.connect(self.update_crop_from_text)
+        self.zmin_input.textChanged.connect(self.update_crop_from_text)
+        self.zmax_input.textChanged.connect(self.update_crop_from_text)
+        
+        self.cropTiffpushButton = self.findChild(QPushButton, "cropTiffpushButton")
+        self.cropTiffpushButton.clicked.connect(self.crop_image)
+        
+        self.volumeRenderingpushButton = self.findChild(QPushButton, "volumeRenderingSegmentationpushButton")
+        self.volumeRenderingpushButton.clicked.connect(self.show_voxel_rendering)
+        
+        self.SaveTiffSegmentationpushButton = self.findChild(QPushButton, "SaveTiffSegmentationpushButton")
+        self.SaveTiffSegmentationpushButton.clicked.connect(self.save_tiff_segmentation)
+        
         self.show()
+    
+    def save_tiff_segmentation(self):
+        if hasattr(self, "segmentation_mask") and np.sum(self.segmentation_mask) != 0 and self.segmentation_mask is not None:
+            options = QFileDialog.Options()
+            file_name, _ = QFileDialog.getSaveFileName(self, "Save Segmentation", "", "TIFF Files (*.tif);;All Files (*)", options=options)
+            if file_name:
+                tiff.imwrite(file_name, self.segmentation_mask.astype(np.uint16),imagej=True) 
+                print(f"Segmentation saved as {file_name}")
+        else:
+            QMessageBox.warning(self, "No Data", "Please segment an image first.")
+        
+    def show_voxel_rendering(self):
+        if hasattr(self, 'segmentation_mask') and np.sum(self.segmentation_mask) != 0 and self.segmentation_mask is not None:
+            self.voxel_window = VoxelRenderingWindow(self.segmentation_mask, self.VoxelSizeX.text(), self.VoxelSizeY.text(), self.VoxelSizeZ.text())
+            self.voxel_window.show()
+        else:
+            QMessageBox.warning(self, "No Data", "Please segment an image first.")
         
     def open_file_dialog(self):
         options = QFileDialog.Options()
@@ -644,6 +740,7 @@ class UI(QMainWindow):
                 'Laplacian': self.LaplaciancheckBox.isChecked(),
                 'LaplacianIter': self.LaplacianItertextEdit.text(),
                 'ScreenedPoisson': self.ScreenedPoissoncheckBox.isChecked(), 
+
                 'ScreenedPoissonIter': self.ScreenedPoissonItertextEdit.text(),
                 'RemoveIslands': self.RemoveIslandscheckBox.isChecked(),
                 'VoxelLength': self.VolumnLengthlineEdit.text(),
@@ -734,6 +831,9 @@ class UI(QMainWindow):
             self.segmentation_mask = np.zeros_like(self.image_data, dtype=bool)
             self.slider.setMaximum(self.image_data.shape[0] - 1)
             self.current_slice = 0
+            self.minthreshold = ''
+            self.minthreshold = ''
+            self.porosity = 1.0
             self.update_view()
             self.update_histogram()
             
@@ -741,11 +841,14 @@ class UI(QMainWindow):
             file_name = os.path.basename(file_path)
             self.file_labelSegmentation.setText(f"Loaded: {file_name}")
             self.slice_label.setText(f"Slice: {self.current_slice+1}")
+            
+            
 
     def change_plane(self, plane):
         self.current_plane = plane
         self.slider.setMaximum(self.image_data.shape[0] - 1 if plane == "XY" else self.image_data.shape[1] - 1)
         self.update_view()
+        self.update_rectangles()
 
     def update_slice(self, value):
         self.current_slice = value
@@ -768,7 +871,7 @@ class UI(QMainWindow):
         raw_slice, seg_slice = self.get_slice()
     
         # Clear the figure and remove extra whitespace
-        self.ax.clear()
+        self.ax.cla()
         self.figure.subplots_adjust(left=0.2, right=.95, top=.97, bottom=0.18)  # Fit image tightly
     
         # Show raw image with correct aspect ratio
@@ -786,8 +889,12 @@ class UI(QMainWindow):
         self.ax.set_xlabel("X-axis", labelpad=2)
         self.ax.set_ylabel("Y-axis", labelpad=1)
         
-        # self.ax.set_xticks([])  # Hide x ticks
-        # self.ax.set_yticks([])  # Hide y ticks
+        # Initialize or update the rectangle selector
+        if not hasattr(self, "rect_selector"):
+            self.rect_selector = RectangleSelector(self.ax, self.on_select, interactive=True,
+                                                       props=dict(facecolor='none', edgecolor='red', linewidth=2))
+        else:
+            self.rect_selector.set_active(True)
         
         self.figure.tight_layout()
         
@@ -846,6 +953,161 @@ class UI(QMainWindow):
         self.hist_canvas.draw()
         
         self.Porositylabel.setText(f'Porosity: {self.porosity:.4f}')
+    
+    def on_select(self, eclick, erelease):
+        """Callback when user selects a region. Updates cropping box in all views."""
+        
+        # # If a rectangle already exists, don't allow new drawing
+        # if hasattr(self, 'rect') and self.rect is not None:
+        #     return
+        
+        x1, y1 = int(eclick.xdata), int(eclick.ydata)
+        x2, y2 = int(erelease.xdata), int(erelease.ydata)
+    
+        # Ensure coordinates are sorted correctly
+        x1, x2 = sorted([x1, x2])
+        y1, y2 = sorted([y1, y2])
+    
+        # Update appropriate dimensions based on the selected plane
+        if self.current_plane == 'XY':
+            self.xmin, self.xmax = x1, x2
+            self.ymin, self.ymax = y1, y2
+    
+            # If zmin/zmax are undefined, initialize to full extent
+            if self.zmin is None or self.zmax is None:
+                self.zmin, self.zmax = 0, self.image_data.shape[0] - 1  
+    
+        elif self.current_plane == 'XZ':
+            self.xmin, self.xmax = x1, x2
+            self.zmin, self.zmax = y1, y2  # Z is vertical in this plane
+    
+            if self.ymin is None or self.ymax is None:
+                self.ymin, self.ymax = 0, self.image_data.shape[1] - 1  
+    
+        elif self.current_plane == 'YZ':
+            self.ymin, self.ymax = x1, x2
+            self.zmin, self.zmax = y1, y2  
+    
+            if self.xmin is None or self.xmax is None:
+                self.xmin, self.xmax = 0, self.image_data.shape[2] - 1  
+    
+        # Ensure all coordinates are valid
+        self.validate_crop_coords()
+    
+        # Update UI and rectangle
+        self.update_text_inputs()
+        self.update_rectangles()
+    
+        # Disable the rectangle selector after drawing the first one
+        self.rect_selector.set_active(False)
+
+    def validate_crop_coords(self):
+        """Ensure all cropping coordinates are valid and within dataset bounds."""
+        
+        if self.image_data is None:
+            return
+    
+        shape = self.image_data.shape  # (Z, Y, X)
+
+        if self.xmin is None or self.xmax is None:
+            self.xmin, self.xmax = 0, shape[2] - 1
+        if self.ymin is None or self.ymax is None:
+            self.ymin, self.ymax = 0, shape[1] - 1
+        if self.zmin is None or self.zmax is None:
+            self.zmin, self.zmax = 0, shape[0] - 1
+
+        # Ensure sorted values
+        self.xmin, self.xmax = sorted([self.xmin, self.xmax])
+        self.ymin, self.ymax = sorted([self.ymin, self.ymax])
+        self.zmin, self.zmax = sorted([self.zmin, self.zmax])
+    
+    def update_rectangles(self):
+        """Update cropping rectangles in all views based on stored coordinates."""
+    
+        # Clear previous rectangles
+        for patch in self.ax.patches:
+            patch.remove()
+    
+        # Ensure cropping coordinates are valid before drawing
+        if self.current_plane == 'XY':
+            if None in [self.xmin, self.xmax, self.ymin, self.ymax]:
+                return  # Don't update rectangle if any coordinate is None
+            rect = plt.Rectangle((self.xmin, self.ymin), self.xmax - self.xmin, self.ymax - self.ymin,
+                                 linewidth=2, edgecolor='red', facecolor='none')
+    
+        elif self.current_plane == 'XZ':
+            if None in [self.xmin, self.xmax, self.zmin, self.zmax]:
+                return  # Don't update rectangle if any coordinate is None
+            rect = plt.Rectangle((self.xmin, self.zmin), self.xmax - self.xmin, self.zmax - self.zmin,
+                                 linewidth=2, edgecolor='red', facecolor='none')
+    
+        elif self.current_plane == 'YZ':
+            if None in [self.ymin, self.ymax, self.zmin, self.zmax]:
+                return  # Don't update rectangle if any coordinate is None
+            rect = plt.Rectangle((self.ymin, self.zmin), self.ymax - self.ymin, self.zmax - self.zmin,
+                                 linewidth=2, edgecolor='red', facecolor='none')
+    
+        self.ax.add_patch(rect)
+    
+        # Refresh canvas
+        self.canvas.draw()
+
+    
+    def update_crop_from_text(self):
+        """Update rectangle when user manually inputs crop coordinates."""
+        try:
+            self.xmin = int(self.xmin_input.text())
+            self.xmax = int(self.xmax_input.text())
+            self.ymin = int(self.ymin_input.text())
+            self.ymax = int(self.ymax_input.text())
+            self.zmin = int(self.zmin_input.text())
+            self.zmax = int(self.zmax_input.text())
+    
+            self.validate_crop_coords()
+            self.update_rectangles()
+        except ValueError:
+            pass  # Ignore invalid input
+        
+        # Update text inputs in case user edited them manually
+        self.update_text_inputs()
+    
+    def update_text_inputs(self):
+        """Update the text inputs based on the current crop coordinates."""
+        if self.xmin is not None and self.xmax is not None:
+            self.xmin_input.setText(str(self.xmin))
+            self.xmax_input.setText(str(self.xmax))
+    
+        if self.ymin is not None and self.ymax is not None:
+            self.ymin_input.setText(str(self.ymin))
+            self.ymax_input.setText(str(self.ymax))
+    
+        if self.zmin is not None and self.zmax is not None:
+            self.zmin_input.setText(str(self.zmin))
+            self.zmax_input.setText(str(self.zmax))
+    
+        # # Debugging: Print values to check if they are being set correctly
+        # print(f"Updating text inputs: xmin={self.xmin}, xmax={self.xmax}, ymin={self.ymin}, ymax={self.ymax}, zmin={self.zmin}, zmax={self.zmax}")
+    
+    def crop_image(self):
+        """ Crop the selected region and update the view """
+        
+        if self.image_data is None:
+            return
+        
+        if hasattr(self, 'xmin') and hasattr(self, 'xmax'):
+            self.image_data = self.image_data[self.zmin:self.zmax, self.ymin:self.ymax, self.xmin:self.xmax]
+            self.segmentation_mask = self.segmentation_mask[self.zmin:self.zmax, self.ymin:self.ymax, self.xmin:self.xmax]
+            
+            self.slider.setMaximum(self.image_data.shape[0] - 1)
+            self.current_slice = 0
+            self.update_view()
+            
+            self.xmin_input.setText('0')
+            self.xmax_input.setText('%i'%self.image_data.shape[2])
+            self.ymin_input.setText('0')
+            self.ymax_input.setText('%i'%self.image_data.shape[1])
+            self.zmin_input.setText('0')
+            self.zmax_input.setText('%i'%self.image_data.shape[0])
     
     def run_voxel2stl(self):
         # Check if there is at least one file with voxel size in the table
