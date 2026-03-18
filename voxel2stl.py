@@ -23,6 +23,8 @@ import networkx as nx
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import pymeshlab as ml
 import io, contextlib
+import json
+from numbers import Number
 
 def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
 
@@ -69,7 +71,7 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
      
     temp_number = 0
     max_workers = min(8, (os.cpu_count() or 1))  # Cap at 8 workers
-    for surf in filenames:
+    for num, surf in enumerate(filenames):
         tempNameIndex = filenames.index(surf)
         
         # Load data
@@ -104,7 +106,7 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
                     temp_number += 1
                     
             else:
-                volumes_to_process = numVolumes
+                volumes_to_process = tempMTX[num]
 
                 if volumes_to_process > 1000:  # Only parallelize if worth it
                     print(f'Processing {volumes_to_process} random volumes in parallel for {surf}...')
@@ -179,7 +181,7 @@ def process_single_volume(args):
     return f"Processed corner {temp_number} of {surf}"
 
 def loadData(surf):
-    if surf.endswith('.tif'):
+    if surf.endswith('.tif') or surf.endswith('.tiff'):
         # Load the TIFF file
         image_volume = imageio.volread(surf)
     
@@ -481,10 +483,11 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
         propertyNames.extend(["fiber_diameter_Mean", "fiber_diameter_Std"])
 
     if savingOptions['property_options']['pore_distribution']:
-        meanPore, stdPore = getPoreDistribution(temp_volume, tifvoxelsize, savingOptions['property_options']['pore_dist_sphere'])
+        meanPore, stdPore, poreDistribution = getPoreDistribution(temp_volume, tifvoxelsize, savingOptions['property_options']['pore_dist_sphere'])
         propertyList.append(meanPore)
         propertyList.append(stdPore)
-        propertyNames.extend(["meanPore", "stdPore"])
+        propertyList.append(poreDistribution)
+        propertyNames.extend(["meanPore", "stdPore", "poreDistribution"])
     
     if savingOptions['property_options']['FiberAngle'] or savingOptions['property_options']['FiberLength']:
         azimuthMean, elevationMean, lengthMean, azimuthSTD, elevationSTD,lengthSTD  = analyzeCenterLine(temp_volume,tifvoxelsize,surfacename,savingOptions['property_options']['FiberAnglePlane'])
@@ -514,26 +517,21 @@ def getPoreDistribution(image_volume, tifvoxelsize, sphereSize):
     
     # Detect local maxima
     local_maxima_coords = peak_local_max(distance_transform, min_distance=int(0.5*sphereSize/tifvoxelsize), labels=image_volume.astype(int))
-    
-    if np.max(distance_transform) > image_volume.shape[0]/2:
-        print('something wrong!', np.max(distance_transform), '>', image_volume.shape[0]/2)
-        tiff.imwrite('.', distance_transform.astype(np.float32),imagej=True)
-        print()
 
     # Measure diameters
-    pore_diameters = []
+    poreDistribution = []
     
     for max_coords in local_maxima_coords:
         distances = distance_transform[tuple(max_coords)]
-        pore_diameters.append(2 * np.max(distances))
+        poreDistribution.append(2 * np.max(distances))
     
     # Scale given voxel size
-    pore_diameters = np.multiply(pore_diameters,tifvoxelsize)-tifvoxelsize/2
+    poreDistribution = np.multiply(poreDistribution,tifvoxelsize)-tifvoxelsize/2
     
-    meanPore = np.mean(pore_diameters)
-    stdPore = np.std(pore_diameters)
+    meanPore = np.mean(poreDistribution)
+    stdPore = np.std(poreDistribution)
     
-    return meanPore, stdPore
+    return meanPore, stdPore, poreDistribution
 
 def getDiamter(image_volume,tifvoxelsize,sphereSize):
     # Distance transform
@@ -805,22 +803,67 @@ def calculate_centerline_properties(split_centerlines,tifvoxelsize,image, plane=
 
     return np.array(centerline_properties,dtype=float)
 
-def writeProperties(savingOptions, propertyNames, propertiesList):
+# def writeProperties(savingOptions, propertyNames, propertiesList):
 
     
-        with open(savingOptions['property_path'], "a+") as f:
-            f.seek(0)  # rewind to the beginning so we can read
-            content = f.read()
+#         with open(savingOptions['property_path'], "a+") as f:
+#             f.seek(0)  # rewind to the beginning so we can read
+#             content = f.read()
 
-            if "StlName" not in content:
-                # Write properties header at the end (file may be empty)
-                f.write('\t'.join(propertyNames) + '\n')
+#             if "StlName" not in content:
+#                 # Write properties header at the end (file may be empty)
+#                 f.write('\t'.join(propertyNames) + '\n')
                 
-            # Write the property values
-            f.write('\t'.join(f"{float(x):.4f}" if (isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())) and abs(float(x)) >= 1e-4  
-                else f"{float(x):.4g}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())  
-                else str(x) for x in propertiesList) + '\n')  
+#             # Write the property values
+#             f.write('\t'.join(f"{float(x):.4f}" if (isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())) and abs(float(x)) >= 1e-4  
+#                 else f"{float(x):.4g}" if isinstance(x, (int, float)) or (isinstance(x, str) and x.replace('.', '', 1).replace('e-', '', 1).replace('e+', '', 1).isdigit())  
+#                 else str(x) for x in propertiesList) + '\n')  
     
+def writeProperties(savingOptions, propertyNames, propertiesList):
+    """
+    Write a single line of property values to file using JSON formatting 
+    for list-like values.
+    """
+    path = Path(savingOptions['property_path'])
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    header = '\t'.join(propertyNames) + '\n'
+    with open(path, "a+", encoding="utf-8") as f:
+        f.seek(0)
+        content = f.read()
+        if "StlName" not in content:
+            f.write(header)
+
+        formatted = [_format_value_json(x) for x in propertiesList]
+        line = '\t'.join(formatted) + '\n'
+        f.write(line)
+
+def _format_value_json(x):
+    """
+    Format a property value as JSON:
+    - Scalars → numeric or string
+    - Lists/tuples/ndarrays → JSON array
+    """
+    # Convert numpy scalars to Python scalars
+    if isinstance(x, np.ndarray):
+        if x.ndim == 0:
+            x = x.item()
+        else:
+            x = x.tolist()
+
+    # Convert numpy arrays/lists/tuples into Python lists
+    if isinstance(x, (list, tuple)):
+        return json.dumps(x)
+
+    # Try numeric scalar formatting
+    try:
+        f = float(x)
+        # choose fixed or general formatting for readability
+        return f"{f:.4f}" if abs(f) >= 1e-4 else f"{f:.4g}"
+    except:
+        # Fall back to string safely
+        return str(x)
+
 
 def run_voxel2stl():
     os.environ['KMP_DUPLICATE_LIB_OK']='True'
@@ -838,10 +881,12 @@ def run_voxel2stl():
     croppingFlag = 'Regular' # 'Regular' or 'Corner'
     print(croppingFlag)
     
-    filenames = [r'D0_0.9988.tif','D1_0.9988.tif'] # one or more Ex: ['file1.tif', 'file2.dat', ...]
+    filenames = [r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\tif2stl\Auto_dsmc_multi\S0_1.06923_2307_NI8.tif',
+                 r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\tif2stl\Auto_dsmc_multi\S1_0.8580_1518_NI8.tif',
+                   r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\tif2stl\Auto_dsmc_multi\S2_0.9438_2040_NI8.tif'] # one or more Ex: ['file1.tif', 'file2.dat', ...]
     
-    filevoxels = [0.9988,0.9988] # one or more correspondig to filenames Ex: [1, 1.8, ...]
-    
+    filevoxels = [1.06923, 0.8580, 0.9438] # one or more correspondig to filenames Ex: [1, 1.8, ...]
+
     # Saving Flags 1 or 0 for True or False, respectively
     savingOptions = {
         "tiff_save": 0,
@@ -851,7 +896,7 @@ def run_voxel2stl():
         "stl_save": 1,
         "stl_path": '',  # Path where files will be saved or '' for current directory
         "property_save": 1,
-        "property_path": '',  # Path where files will be saved or '' for current directory
+        "property_path": r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\tif2stl\Auto_dsmc_multi\propertiestest.txt',  # Path where files will be saved or '' for current directory
         "property_options": {
             "min_max": 1,
             "surf_area": 1,
@@ -861,7 +906,7 @@ def run_voxel2stl():
             "fiber_diameter": 0,
             "fiber_diam_sphere": 0, # in um
             "pore_distribution": 0,
-            "pore_dist_sphere": 50, # in um
+            "pore_dist_sphere": 300, # in um
             "FiberAngle": 0,
             "FiberAnglePlane": 'YZ',
             "FiberLength": 0,
