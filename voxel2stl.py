@@ -67,7 +67,7 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
      
     temp_number = 0
     max_workers = min(8, (os.cpu_count() or 1))  # Cap at 8 workers
-    for surf in filenames:
+    for num, surf in enumerate(filenames):
         tempNameIndex = filenames.index(surf)
         
         # Load data
@@ -102,7 +102,7 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
                     temp_number += 1
                     
             else:
-                volumes_to_process = numVolumes
+                volumes_to_process = tempMTX[num]
 
                 if volumes_to_process > 5:  # Only parallelize if worth it
                     print(f'Processing {volumes_to_process} random volumes in parallel for {surf}...')
@@ -863,9 +863,11 @@ def run_voxel2stl():
     croppingFlag = 'Regular' # 'Regular' or 'Corner'
     print(croppingFlag)
     
-    filenames = [r'E:\LuisChacon\HERMES\RedRTV\8384CubeRaw.nc.filtered.filtered.labels.filtered.tif',] # one or more Ex: ['file1.tif', 'file2.dat', ...]
+    filenames = [r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\tif2stl\Auto_dsmc_multi\S0_1.06923_2307_NI8.tif', 
+                 r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\tif2stl\Auto_dsmc_multi\S1_0.8580_1518_NI8.tif',
+                   r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\tif2stl\Auto_dsmc_multi\S2_0.9438_2040_NI8.tif'] # one or more Ex: ['file1.tif', 'file2.dat', ...]
     
-    filevoxels = [3.177714] # one or more correspondig to filenames Ex: [1, 1.8, ...]
+    filevoxels = [1.06923, 0.8580, 0.9438] # one or more correspondig to filenames Ex: [1, 1.8, ...]
     
     # Saving Flags 1 or 0 for True or False, respectively
     savingOptions = {
@@ -876,7 +878,7 @@ def run_voxel2stl():
         "stl_save": 0,
         "stl_path": '',  # Path where files will be saved or '' for current directory
         "property_save": 1,
-        "property_path": r'E:\LuisChacon\HERMES\RedRTV\RedRTV_00800_sphere400_test.txt',  # Path where files will be saved or '' for current directory
+        "property_path": r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\tif2stl\Auto_dsmc_multi\propertiestest.txt',  # Path where files will be saved or '' for current directory
         "property_options": {
             "min_max": 0,
             "surf_area": 1,
@@ -885,8 +887,8 @@ def run_voxel2stl():
             "porosity": 1,
             "fiber_diameter": 0,
             "fiber_diam_sphere": 0, # in um
-            "pore_distribution": 1,
-            "pore_dist_sphere": 400, # in um
+            "pore_distribution": 0,
+            "pore_dist_sphere": 300, # in um
             "FiberAngle": 0,
             "FiberAnglePlane": 'YZ',
             "FiberLength": 0,
@@ -897,8 +899,8 @@ def run_voxel2stl():
     
     if croppingFlag == 'Regular':
         # If both are set to 0 Full volume will be prioritize
-        volumeLength = 800 # In um or enter 0 for Full volume
-        numVolumes = 4 # Number of volumes or enter 0 for Lego
+        volumeLength = 100 # In um or enter 0 for Full volume
+        numVolumes = 10 # Number of volumes or enter 0 for Lego
 
         cropSettings = filenames, filevoxels, numVolumes, volumeLength
         print(cropSettings)
