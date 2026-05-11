@@ -16,15 +16,12 @@ import os
 from scipy.ndimage import distance_transform_edt
 from skimage.feature import peak_local_max
 from pathlib import Path
-import subprocess
-import sys
 import re
 import networkx as nx
 from concurrent.futures import ProcessPoolExecutor, as_completed
-import pymeshlab as ml
-import io, contextlib
 import json
 from numbers import Number
+from scipy.spatial import cKDTree
 
 def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
 
@@ -184,6 +181,7 @@ def loadData(surf):
     if surf.endswith('.tif') or surf.endswith('.tiff'):
         # Load the TIFF file
         image_volume = imageio.volread(surf)
+        image_volume = np.transpose(image_volume, (2, 1, 0))
     
     elif surf.endswith('.txt') or surf.endswith('.dat'):
         tempdata = np.loadtxt(surf, skiprows=2)
@@ -319,13 +317,13 @@ def getMesh(binary_volume,length,voxel_size):
     # Create a mesh using the marching cubes algorithm
     vertices, faces, _, _ = measure.marching_cubes(binary_volume, allow_degenerate=False, method='lewiner')  ##add the parallel marching cubes here
     
-    # Swap x and z to make it match the tif
-    # Indices of the columns you want to swap
-    column_index1 = 0  # Replace with the index of the first column
-    column_index2 = 2  # Replace with the index of the second column
+    # # Swap x and z to make it match the tif
+    # # Indices of the columns you want to swap
+    # column_index1 = 0  # Replace with the index of the first column
+    # column_index2 = 2  # Replace with the index of the second column
     
-    # Swap the columns using array indexing
-    vertices[:, [column_index1, column_index2]] = vertices[:, [column_index2, column_index1]]
+    # # Swap the columns using array indexing
+    # vertices[:, [column_index1, column_index2]] = vertices[:, [column_index2, column_index1]]
  
     # Convert vertices to physical coordinates using voxel size
     vertices = vertices * voxel_size - voxel_size
@@ -352,10 +350,7 @@ def stlSmoothing(FileName, vertices, faces, surfaceSettings ):
         filterName = '_screened_poisson'+str(surfaceSettings['ScreenedPoisson_iter'])
         # Load mesh 
         ms = loadMeshPymeshlab(vertices,faces)
-        if version == "2021.10":
-            ms.apply_filter('surface_reconstruction_screened_poisson', depth=surfaceSettings['ScreenedPoisson_iter'], preclean=True)
-        else:
-            ms.apply_filter('generate_surface_reconstruction_screened_poisson', depth=surfaceSettings['ScreenedPoisson_iter'], preclean=True)
+        ms.apply_filter('generate_surface_reconstruction_screened_poisson', depth=surfaceSettings['ScreenedPoisson_iter'], preclean=True)
         mesh = ms.current_mesh()
         vertices = mesh.vertex_matrix()
         faces = mesh.face_matrix() 
@@ -379,6 +374,7 @@ def loadMeshTrimesh(vertices,faces):
     return trimesh.Trimesh(vertices=vertices, faces=faces)
 
 def loadMeshPymeshlab(vertices,faces):
+    import pymeshlab as ml
     
     # Create meshLab mesh from vertices and faces
     meshTarget = ml.Mesh(vertices,faces) 
@@ -396,13 +392,10 @@ def remove_floating_islands_Stl(vertices,faces):
     ms = loadMeshPymeshlab(vertices,faces)
 
     # Compute connected components and select small components for deletion
-    if version == "2021.10":
-        ms.apply_filter('select_small_disconnected_component',nbfaceratio=1)
-        ms.apply_filter('delete_selected_faces_and_vertices')
-    else:
-        ms.apply_filter('compute_selection_by_small_disconnected_components_per_face',nbfaceratio=1)
-        # Delete the selected small components
-        ms.apply_filter('meshing_remove_selected_vertices_and_faces')
+    ms.apply_filter('compute_selection_by_small_disconnected_components_per_face',nbfaceratio=1)
+
+    # Delete the selected small components
+    ms.apply_filter('meshing_remove_selected_vertices_and_faces')
 
     return ms
 
@@ -418,22 +411,13 @@ def fixMesh(FileName,vertices,faces):
     # Load mesh 
     ms = loadMeshPymeshlab(vertices,faces)
     
-    if version == "2021.10":
-        ms.apply_filter('surface_reconstruction_screened_poisson', depth=8, preclean=True)
-        ms.apply_filter('remove_zero_area_faces') 
-        ms.apply_filter('repair_non_manifold_edges') 
-        ms.apply_filter('repair_non_manifold_vertices_by_splitting')
-        ms.apply_filter('remove_duplicate_faces')
-        ms.apply_filter('remove_duplicate_vertices')
-        ms.apply_filter('re_orient_all_faces_coherentely')
-    else:
-        ms.apply_filter('generate_surface_reconstruction_screened_poisson', depth=8, preclean=True)
-        ms.apply_filter('meshing_remove_null_faces')
-        ms.apply_filter('meshing_repair_non_manifold_edges') 
-        ms.apply_filter('meshing_repair_non_manifold_vertices')
-        ms.apply_filter('meshing_remove_duplicate_faces')
-        ms.apply_filter('meshing_remove_duplicate_vertices')
-        ms.apply_filter('meshing_re_orient_faces_coherently')
+    ms.apply_filter('generate_surface_reconstruction_screened_poisson', depth=8, preclean=True)
+    ms.apply_filter('meshing_remove_null_faces')
+    ms.apply_filter('meshing_repair_non_manifold_edges') 
+    ms.apply_filter('meshing_repair_non_manifold_vertices')
+    ms.apply_filter('meshing_remove_duplicate_faces')
+    ms.apply_filter('meshing_remove_duplicate_vertices')
+    ms.apply_filter('meshing_re_orient_faces_coherently')
 
     FileName = FileName+'_Fixed'
     print(FileName, 'fixed!')
@@ -609,21 +593,80 @@ def analyzeCenterLine(image,tifvoxelsize,surfacename,plane='XY'):
     num_centerlines = len(list(nx.connected_components(MST)))
     num_split_centerlines = len(split_centerlines)
     
-    
-    # labeled_image = assign_voxels_to_centerlines_with_kdtree(image, split_centerlines)
-    
-    # tiff.imwrite(fileName[:-4]+'test.tif', labeled_image.astype(np.uint16),imagej=True)
-    
-    # plot_centerlines_and_voxels(image, split_centerlines, labeled_image)
-    
     # Compute angles
-    centerline_properties = calculate_centerline_properties(split_centerlines,tifvoxelsize,image,plane)
+    centerline_properties, direction_coords, direction_vectors, direction_centerline_ids = (
+        calculate_centerline_properties(split_centerlines,
+                                        tifvoxelsize,
+                                        image,
+                                        plane
+                                        )
+    )
+
+    # Map direction vectors to material voxels
+    direction_map, distance_map, centerline_id_map = map_direction_to_material_voxels(
+        image,
+        direction_coords,
+        direction_vectors,
+        direction_centerline_ids
+        )
+    
+    # Save the direction vecotr per material voxel
+    save_voxel_direction_map_txt(
+        surfacename[:-4] + '_voxel_directions.txt',
+        direction_map
+        )
     
     azimuthMean,elevationMean,lengthMean = np.mean(centerline_properties,axis=0)
     azimuthSTD, elevationSTD,lengthSTD = np.std(centerline_properties, axis=0, ddof=0)
     
     return azimuthMean,elevationMean,lengthMean, azimuthSTD, elevationSTD,lengthSTD 
-    
+
+def save_voxel_direction_map_txt(filename, direction_map):
+    coords = np.column_stack(np.where(~np.isnan(direction_map[..., 0])))
+
+    vectors = direction_map[
+        coords[:, 0],
+        coords[:, 1],
+        coords[:, 2]
+    ]
+
+    data = np.column_stack((coords, vectors))
+
+    np.savetxt(
+        filename,
+        data,
+        fmt="%.6f",
+        header="x y z vx vy vz",
+        comments=''
+    )
+
+def map_direction_to_material_voxels(image, direction_coords, direction_vectors, direction_centerline_ids=None):
+    material_coords = np.column_stack(np.where(image > 0))
+
+    tree = cKDTree(direction_coords)
+    distances, nearest_idx = tree.query(material_coords, k=1)
+
+    # NaN means "no material / no direction assigned"
+    direction_map = np.full(image.shape + (3,), np.nan, dtype=np.float32)
+    distance_map = np.full(image.shape, np.nan, dtype=np.float32)
+
+    if direction_centerline_ids is not None:
+        centerline_id_map = np.full(image.shape, -1, dtype=np.int32)
+    else:
+        centerline_id_map = None
+
+    x = material_coords[:, 0]
+    y = material_coords[:, 1]
+    z = material_coords[:, 2]
+
+    direction_map[x, y, z, :] = direction_vectors[nearest_idx]
+    distance_map[x, y, z] = distances
+
+    if direction_centerline_ids is not None:
+        centerline_id_map[x, y, z] = direction_centerline_ids[nearest_idx]
+
+    return direction_map, distance_map, centerline_id_map
+
 # Function to split centerlines at branch points
 def split_and_order_centerlines(graph, branch_nodes, steps=4):
     """
@@ -751,7 +794,12 @@ def calculate_centerline_properties(split_centerlines,tifvoxelsize,image, plane=
     dist_transform = distance_transform_edt(image > 0)
     centerline_properties = []
 
-    for centerline in split_centerlines:
+    # New arrays for mapping later
+    direction_coords = []
+    direction_vectors = []
+    direction_centerline_ids = []
+
+    for centerline_id, centerline in enumerate(split_centerlines):
         vectors = []
         length = 0.0
         
@@ -777,6 +825,14 @@ def calculate_centerline_properties(split_centerlines,tifvoxelsize,image, plane=
             # centerline_properties.append([None, None, length])
             continue
 
+        mean_vector_unit = mean_vector / norm
+
+        # Save this direction for every voxel in this centerline
+        for voxel in centerline:
+            direction_coords.append(voxel)
+            direction_vectors.append(mean_vector_unit)
+            direction_centerline_ids.append(centerline_id)
+
         # Compute azimuth and elevation based on selected plane
         if plane == 'XY':
             avg_azimuth = np.arctan2(mean_vector[1], mean_vector[2])  # θ (rotation in XY)
@@ -801,7 +857,12 @@ def calculate_centerline_properties(split_centerlines,tifvoxelsize,image, plane=
 
         centerline_properties.append([float(np.degrees(avg_azimuth)), float(np.degrees(avg_elevation)), float(length)])
 
-    return np.array(centerline_properties,dtype=float)
+    return (
+        np.array(centerline_properties,dtype=float), 
+        np.array(direction_coords, dtype=int), 
+        np.array(direction_vectors, dtype=np.float32),
+        np.array(direction_centerline_ids, dtype=np.int32)
+        )
 
 # def writeProperties(savingOptions, propertyNames, propertiesList):
 
@@ -872,72 +933,51 @@ def run_voxel2stl():
     # Surface Settings
     surfaceSettings = {
         "laplacianFlag": 1,
-        "laplacian_iter": 2,
+        "laplacian_iter": 1,
         "ScreenedPoissonFlag": 0,
         "ScreenedPoisson_iter": 8,
-        "RemoveIslandsFlag": 1
+        "RemoveIslandsFlag": 0
         }
     
     croppingFlag = 'Regular' # 'Regular' or 'Corner'
     print(croppingFlag)
     
-    filenames = [r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\tif2stl\Auto_dsmc_multi\S0_1.06923_2307_NI8.tif',
-                 r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\tif2stl\Auto_dsmc_multi\S1_0.8580_1518_NI8.tif',
-                   r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\tif2stl\Auto_dsmc_multi\S2_0.9438_2040_NI8.tif'] # one or more Ex: ['file1.tif', 'file2.dat', ...]
+    filenames = [r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\grid_physical_45Elevation_1.0.tif'] # one or more Ex: ['file1.tif', 'file2.dat', ...]
     
-    filevoxels = [1.06923, 0.8580, 0.9438] # one or more correspondig to filenames Ex: [1, 1.8, ...]
-
+    filevoxels = [1] # one or more correspondig to filenames Ex: [1, 1.8, ...]
+    
     # Saving Flags 1 or 0 for True or False, respectively
     savingOptions = {
         "tiff_save": 0,
         "tiff_path": '', # Path where files will be saved or '' for current directory
         "voxel_save": 0,
         "voxel_path": '',  # Path where files will be saved or '' for current directory
-        "stl_save": 1,
+        "stl_save": 0,
         "stl_path": '',  # Path where files will be saved or '' for current directory
         "property_save": 1,
-        "property_path": r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\tif2stl\Auto_dsmc_multi\propertiestest.txt',  # Path where files will be saved or '' for current directory
+        "property_path": r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\testproperties.txt',  # Path where files will be saved or '' for current directory
         "property_options": {
-            "min_max": 1,
-            "surf_area": 1,
-            "closed_volume": 1,
-            "vol_by_area": 1,
-            "porosity": 1,
-            "fiber_diameter": 0,
-            "fiber_diam_sphere": 0, # in um
+            "min_max": 0,
+            "surf_area": 0,
+            "closed_volume": 0,
+            "vol_by_area": 0,
+            "porosity": 0,
+            "fiber_diameter": 1,
+            "fiber_diam_sphere": 15, # in um
             "pore_distribution": 0,
             "pore_dist_sphere": 300, # in um
-            "FiberAngle": 0,
-            "FiberAnglePlane": 'YZ',
+            "FiberAngle": 1,
+            "FiberAnglePlane": 'XY',
             "FiberLength": 0,
             
         }
     }
     print(savingOptions)
     
-    #CHECK PYMESHLAB VERSION
-    result = subprocess.run(
-    [sys.executable, "-c", "import pymeshlab; pymeshlab.print_pymeshlab_version()"],
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-    universal_newlines=True  # This works in older Python versions
-    )
-    version_output = result.stdout
-
-    # Extract version
-    match = re.search(r'PyMeshLab (\d+\.\d+)', version_output)
-    global version
-    if match:
-        version = match.group(1)
-        print(f"Version: {version}")
-    else:
-        print("Pymeshlab is NOT 2021")
-    
-
     if croppingFlag == 'Regular':
         # If both are set to 0 Full volume will be prioritize
-        volumeLength = 100 # In um or enter 0 for Full volume
-        numVolumes = 10 # Number of volumes or enter 0 for Lego
+        volumeLength = 0 # In um or enter 0 for Full volume
+        numVolumes = 1 # Number of volumes or enter 0 for Lego
 
         cropSettings = filenames, filevoxels, numVolumes, volumeLength
         print(cropSettings)
