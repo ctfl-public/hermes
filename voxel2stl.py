@@ -327,6 +327,9 @@ def getMesh(binary_volume,length,voxel_size):
  
     # Convert vertices to physical coordinates using voxel size
     vertices = vertices * voxel_size - voxel_size
+
+    # Flip normals by reversing face winding
+    faces = faces[:, ::-1]
     
     return vertices, faces
 
@@ -476,6 +479,8 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
     if savingOptions['property_options']['FiberAngle'] or savingOptions['property_options']['FiberLength']:
         azimuthMean, elevationMean, lengthMean, azimuthSTD, elevationSTD,lengthSTD  = analyzeCenterLine(temp_volume,tifvoxelsize,surfacename,savingOptions['property_options']['FiberAnglePlane'])
         if savingOptions['property_options']['FiberAngle']:
+            propertyList.append(savingOptions['property_options']['FiberAnglePlane'])
+            propertyNames.append("ReferencePlane")
             propertyList.append(azimuthMean)
             propertyNames.append("MeanAzimuthAngle")
             propertyList.append(azimuthSTD)
@@ -551,7 +556,7 @@ def analyzeCenterLine(image,tifvoxelsize,surfacename,plane='XY'):
     # Skeletonize the image
     skeleton = morphology.skeletonize(image_smoothed)
     
-    tiff.imwrite(surfacename[:-4]+'_skeleton.tif', skeleton.astype(np.uint16),imagej=True)
+    # tiff.imwrite(surfacename[:-4]+'_skeleton.tif', skeleton.astype(np.uint16),imagej=True)
     
     # Extract centerline coordinates
     coords = np.column_stack(np.where(skeleton > 0))  # Get (Z, Y, X) coordinates
@@ -772,97 +777,6 @@ def split_and_order_centerlines(graph, branch_nodes, steps=4):
 
     return split_centerlines, G
 
-    
-    # # For each branch node, adjust the intersection by removing the first voxel
-    # # along the branch that deviates most from the others.
-    # for branch in branch_nodes:
-    #     if branch not in G:
-    #         continue
-    #     neighbors = list(G.neighbors(branch))
-    #     if len(neighbors) <= 1:
-    #         # Not really an intersection if only one neighbor.
-    #         continue
-        
-    #     branch_vectors = {}
-    #     # For each connected branch from the branch node, compute a unit direction vector.
-    #     for n in neighbors:
-    #         # If possible, follow the branch "steps" voxels ahead.
-    #         current = n
-    #         prev = branch
-    #         for _ in range(steps - 1):
-    #             # Look for a neighbor that is not the previous node.
-    #             next_candidates = [nbr for nbr in G.neighbors(current) if nbr != prev]
-    #             if next_candidates:
-    #                 prev = current
-    #                 current = next_candidates[0]
-    #             else:
-    #                 break
-    #         # Compute vector from branch to the voxel 'current'
-    #         vec = np.array(current) - np.array(branch)
-    #         norm = np.linalg.norm(vec)
-    #         if norm != 0:
-    #             branch_vectors[n] = vec / norm
-        
-    #     if len(branch_vectors) < 2:
-    #         # Not enough branches to compare
-    #         continue
-        
-    #     # Compute total angular difference for each branch direction
-    #     differences = {}
-    #     for n1, v1 in branch_vectors.items():
-    #         total_angle = 0
-    #         for n2, v2 in branch_vectors.items():
-    #             if n1 == n2:
-    #                 continue
-    #             # Compute angle difference using dot product
-    #             dot = np.dot(v1, v2)
-    #             # Clip dot to avoid numerical issues
-    #             dot = np.clip(dot, -1, 1)
-    #             angle = np.arccos(dot)
-    #             total_angle += angle
-    #         differences[n1] = total_angle
-        
-    #     # Identify the neighbor whose branch has the maximum total angular difference.
-    #     branch_to_adjust = max(differences, key=differences.get)
-        
-    #     # Instead of removing the branch node, remove the neighbor on the branch that is most different.
-    #     if branch_to_adjust in G:
-    #         G.remove_node(branch_to_adjust)
-    
-    # # After adjusting the intersections, split the modified graph into ordered centerlines.
-    # split_centerlines = []
-
-    # # Process each connected component separately
-    # for component in nx.connected_components(G):
-    #     subgraph = G.subgraph(component)
-
-    #     # Find endpoints (nodes with only 1 adjacent node)
-    #     endpoints = [node for node in component if len(subgraph._adj[node]) == 1]
-
-    #     if len(endpoints) < 2:
-    #         # If no clear start, just keep it as is
-    #         split_centerlines.append(list(component))
-    #         continue
-
-    #     # Start from one of the endpoints
-    #     start = endpoints[0]
-    #     ordered_centerline = []
-    #     visited = set()
-
-    #     # Traverse from start node in order
-    #     node = start
-    #     while node is not None:
-    #         ordered_centerline.append(node)
-    #         visited.add(node)
-
-    #         # Move to next node
-    #         next_nodes = [n for n in subgraph._adj[node] if n not in visited]
-    #         node = next_nodes[0] if next_nodes else None  # Pick the next unvisited node
-
-    #     split_centerlines.append(ordered_centerline)
-
-    # return split_centerlines, G
-
 def order_component(subgraph):
     component_nodes = list(subgraph.nodes())
 
@@ -1076,8 +990,8 @@ def run_voxel2stl():
         "tiff_path": '', # Path where files will be saved or '' for current directory
         "voxel_save": 0,
         "voxel_path": '',  # Path where files will be saved or '' for current directory
-        "stl_save": 0,
-        "stl_path": '',  # Path where files will be saved or '' for current directory
+        "stl_save": 1,
+        "stl_path": r'C:\Users\Luis Chacon\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\puma\HERMESResults',  # Path where files will be saved or '' for current directory
         "property_save": 1,
         "property_path": r'C:\Users\Luis Chacon\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\puma\HERMESResults\propertiesAngle.txt',  # Path where files will be saved or '' for current directory
         "property_options": {
