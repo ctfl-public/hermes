@@ -686,10 +686,32 @@ def split_and_order_centerlines(graph, branch_nodes, steps=4):
     """
     # Work on a copy so that the original graph is not modified
     G = graph.copy()
-    
+
+     # -------------------------------------------------
+    # If no branch nodes, no splitting needed
+    # Just order each connected component and return
+    # -------------------------------------------------
+    if branch_nodes is None or len(branch_nodes) == 0:
+        split_centerlines = []
+
+        for component in nx.connected_components(G):
+            subgraph = G.subgraph(component).copy()
+            ordered_centerline = order_component(subgraph)
+
+            if len(ordered_centerline) > 0:
+                split_centerlines.append(ordered_centerline)
+
+        return split_centerlines, G
+
+    # -------------------------------------------------
+    # Branch adjustment
+    # -------------------------------------------------
+
     # For each branch node, adjust the intersection by removing the first voxel
     # along the branch that deviates most from the others.
     for branch in branch_nodes:
+        if branch not in G:
+            continue
         neighbors = list(G.neighbors(branch))
         if len(neighbors) <= 1:
             # Not really an intersection if only one neighbor.
@@ -740,40 +762,142 @@ def split_and_order_centerlines(graph, branch_nodes, steps=4):
         # Instead of removing the branch node, remove the neighbor on the branch that is most different.
         if branch_to_adjust in G:
             G.remove_node(branch_to_adjust)
-    
-    # After adjusting the intersections, split the modified graph into ordered centerlines.
-    split_centerlines = []
 
-    # Process each connected component separately
     for component in nx.connected_components(G):
-        subgraph = G.subgraph(component)
+        subgraph = G.subgraph(component).copy()
+        ordered_centerline = order_component(subgraph)
 
-        # Find endpoints (nodes with only 1 adjacent node)
-        endpoints = [node for node in component if len(subgraph._adj[node]) == 1]
-
-        if len(endpoints) < 2:
-            # If no clear start, just keep it as is
-            split_centerlines.append(list(component))
-            continue
-
-        # Start from one of the endpoints
-        start = endpoints[0]
-        ordered_centerline = []
-        visited = set()
-
-        # Traverse from start node in order
-        node = start
-        while node is not None:
-            ordered_centerline.append(node)
-            visited.add(node)
-
-            # Move to next node
-            next_nodes = [n for n in subgraph._adj[node] if n not in visited]
-            node = next_nodes[0] if next_nodes else None  # Pick the next unvisited node
-
-        split_centerlines.append(ordered_centerline)
+        if len(ordered_centerline) > 0:
+            split_centerlines.append(ordered_centerline)
 
     return split_centerlines, G
+
+    
+    # # For each branch node, adjust the intersection by removing the first voxel
+    # # along the branch that deviates most from the others.
+    # for branch in branch_nodes:
+    #     if branch not in G:
+    #         continue
+    #     neighbors = list(G.neighbors(branch))
+    #     if len(neighbors) <= 1:
+    #         # Not really an intersection if only one neighbor.
+    #         continue
+        
+    #     branch_vectors = {}
+    #     # For each connected branch from the branch node, compute a unit direction vector.
+    #     for n in neighbors:
+    #         # If possible, follow the branch "steps" voxels ahead.
+    #         current = n
+    #         prev = branch
+    #         for _ in range(steps - 1):
+    #             # Look for a neighbor that is not the previous node.
+    #             next_candidates = [nbr for nbr in G.neighbors(current) if nbr != prev]
+    #             if next_candidates:
+    #                 prev = current
+    #                 current = next_candidates[0]
+    #             else:
+    #                 break
+    #         # Compute vector from branch to the voxel 'current'
+    #         vec = np.array(current) - np.array(branch)
+    #         norm = np.linalg.norm(vec)
+    #         if norm != 0:
+    #             branch_vectors[n] = vec / norm
+        
+    #     if len(branch_vectors) < 2:
+    #         # Not enough branches to compare
+    #         continue
+        
+    #     # Compute total angular difference for each branch direction
+    #     differences = {}
+    #     for n1, v1 in branch_vectors.items():
+    #         total_angle = 0
+    #         for n2, v2 in branch_vectors.items():
+    #             if n1 == n2:
+    #                 continue
+    #             # Compute angle difference using dot product
+    #             dot = np.dot(v1, v2)
+    #             # Clip dot to avoid numerical issues
+    #             dot = np.clip(dot, -1, 1)
+    #             angle = np.arccos(dot)
+    #             total_angle += angle
+    #         differences[n1] = total_angle
+        
+    #     # Identify the neighbor whose branch has the maximum total angular difference.
+    #     branch_to_adjust = max(differences, key=differences.get)
+        
+    #     # Instead of removing the branch node, remove the neighbor on the branch that is most different.
+    #     if branch_to_adjust in G:
+    #         G.remove_node(branch_to_adjust)
+    
+    # # After adjusting the intersections, split the modified graph into ordered centerlines.
+    # split_centerlines = []
+
+    # # Process each connected component separately
+    # for component in nx.connected_components(G):
+    #     subgraph = G.subgraph(component)
+
+    #     # Find endpoints (nodes with only 1 adjacent node)
+    #     endpoints = [node for node in component if len(subgraph._adj[node]) == 1]
+
+    #     if len(endpoints) < 2:
+    #         # If no clear start, just keep it as is
+    #         split_centerlines.append(list(component))
+    #         continue
+
+    #     # Start from one of the endpoints
+    #     start = endpoints[0]
+    #     ordered_centerline = []
+    #     visited = set()
+
+    #     # Traverse from start node in order
+    #     node = start
+    #     while node is not None:
+    #         ordered_centerline.append(node)
+    #         visited.add(node)
+
+    #         # Move to next node
+    #         next_nodes = [n for n in subgraph._adj[node] if n not in visited]
+    #         node = next_nodes[0] if next_nodes else None  # Pick the next unvisited node
+
+    #     split_centerlines.append(ordered_centerline)
+
+    # return split_centerlines, G
+
+def order_component(subgraph):
+    component_nodes = list(subgraph.nodes())
+
+    if len(component_nodes) == 0:
+        return []
+
+    if len(component_nodes) == 1:
+        return component_nodes
+
+    # Find endpoints
+    endpoints = [node for node in component_nodes if subgraph.degree(node) == 1]
+
+    # If it is a simple path, start from an endpoint
+    if len(endpoints) >= 1:
+        start = endpoints[0]
+    else:
+        # Closed loop or no clear endpoint
+        start = component_nodes[0]
+
+    ordered_centerline = []
+    visited = set()
+    node = start
+
+    # Traverse from start node in order
+    node = start
+    while node is not None:
+        ordered_centerline.append(node)
+        visited.add(node)
+
+        # Move to next node
+        next_nodes = [n for n in subgraph._adj[node] if n not in visited]
+        node = next_nodes[0] if next_nodes else None  # Pick the next unvisited node
+    
+    return ordered_centerline
+
 
 def calculate_centerline_properties(split_centerlines,tifvoxelsize,image, plane='XY', step_size=4):
     """
@@ -835,14 +959,14 @@ def calculate_centerline_properties(split_centerlines,tifvoxelsize,image, plane=
 
         # Compute azimuth and elevation based on selected plane
         if plane == 'XY':
-            avg_azimuth = np.arctan2(mean_vector[1], mean_vector[2])  # θ (rotation in XY)
-            avg_elevation = np.arcsin(mean_vector[0] / norm)  # φ (tilt in Z)
+            avg_azimuth = np.arctan2(mean_vector[1], mean_vector[0])  # θ (rotation in XY)
+            avg_elevation = np.arcsin(mean_vector[2] / norm)  # φ (tilt in Z)
         elif plane == 'XZ':
-            avg_azimuth = np.arctan2(mean_vector[0], mean_vector[2])  # θ (rotation in XZ)
+            avg_azimuth = np.arctan2(mean_vector[2], mean_vector[0])  # θ (rotation in XZ)
             avg_elevation = np.arcsin(mean_vector[1] / norm)  # φ (tilt in Y)
         elif plane == 'YZ':
-            avg_azimuth = np.arctan2(mean_vector[0], mean_vector[1])  # θ (rotation in YZ)
-            avg_elevation = np.arcsin(mean_vector[2] / norm)  # φ (tilt in X)
+            avg_azimuth = np.arctan2(mean_vector[2], mean_vector[1])  # θ (rotation in YZ)
+            avg_elevation = np.arcsin(mean_vector[0] / norm)  # φ (tilt in X)
         else:
             raise ValueError("Invalid plane option. Choose from 'XY', 'XZ', or 'YZ'.")
         
@@ -942,7 +1066,7 @@ def run_voxel2stl():
     croppingFlag = 'Regular' # 'Regular' or 'Corner'
     print(croppingFlag)
     
-    filenames = [r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\grid_physical_45Elevation_1.0.tif'] # one or more Ex: ['file1.tif', 'file2.dat', ...]
+    filenames = [r'C:\Users\Luis Chacon\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes-OLD\grid_physical_15Elevation_1.0.tif'  ] # one or more Ex: ['file1.tif', 'file2.dat', ...]
     
     filevoxels = [1] # one or more correspondig to filenames Ex: [1, 1.8, ...]
     
@@ -955,20 +1079,20 @@ def run_voxel2stl():
         "stl_save": 0,
         "stl_path": '',  # Path where files will be saved or '' for current directory
         "property_save": 1,
-        "property_path": r'C:\Users\lch285\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\hermes\testproperties.txt',  # Path where files will be saved or '' for current directory
+        "property_path": r'C:\Users\Luis Chacon\OneDrive - University of Kentucky\Universidad - OneDrive\Research\Github\puma\HERMESResults\propertiesAngle.txt',  # Path where files will be saved or '' for current directory
         "property_options": {
             "min_max": 0,
-            "surf_area": 0,
+            "surf_area": 1,
             "closed_volume": 0,
-            "vol_by_area": 0,
-            "porosity": 0,
+            "vol_by_area": 1,
+            "porosity": 1,
             "fiber_diameter": 1,
-            "fiber_diam_sphere": 15, # in um
+            "fiber_diam_sphere": 10, # in um
             "pore_distribution": 0,
-            "pore_dist_sphere": 300, # in um
+            "pore_dist_sphere": 30, # in um
             "FiberAngle": 1,
             "FiberAnglePlane": 'XY',
-            "FiberLength": 0,
+            "FiberLength": 1,
             
         }
     }
