@@ -1,0 +1,28 @@
+Instructions to run the MPI version of HERMES.
+
+1. Install the conda environemnt hermes_mpi.yml in the HPC cluster (linux environment).
+2. Activate: conda activate env_name
+3. Load the tiff file and voxel resolution
+4. Under croppingFlag == 'Regular' set the cube length and number of volumes to be generated. 
+
+Now in the submission script, adjust the 
+
+#!/bin/bash                                                                                                                                                                                                                                                                              
+#SBATCH -t 0-0:29:59 # hours, min, sec
+#SBATCH --job-name=NAME
+#SBATCH --nodes=XXX
+#SBATCH --partition=PARTITION 
+#SBATCH --exclusive (optional but preferred)
+
+#make sure conda env is active
+
+mpirun -n YYY /home/.conda/envs/hermes_mpi/bin/python voxel2stl.py
+
+AN EXAMPLE:
+XXX - is the number of nodes available/allocated. 
+YYY - Number of CPU
+Example: If 2 nodes are available then XXX = 2
+
+If each Node has 128 GB memory then 2 nodes = 128*2 GB memory allocated to code
+
+YYY is number of CPU (make sure ample memory is there)
