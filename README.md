@@ -187,7 +187,7 @@ The bibliographic entry below is a draft and should be updated with the final DO
 @article{chacon2026hermes,
   title   = {A computational framework for automated microstructure volume generation and property extraction from x-ray computed tomography (XRCT) data},
   author  = {Chacon, Luis A. and Banerjee, Ayan and Stoffel, Tyler D. and Poovathingal, Savio J.},
-  journal = {Advances in Engineering Software},
+  journal = {Computational Materials Science},
   year    = {2026},
   note    = {Manuscript in preparation}
 }
