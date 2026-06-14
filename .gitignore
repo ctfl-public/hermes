@@ -1,0 +1,42 @@
+# macOS and editor files
+.DS_Store
+*.swp
+*.swo
+
+# Python cache and test output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Generated HERMES outputs
+*.stl
+*.prof
+profile_rank_*.prof
+*.vtk
+*.vtu
+*.vtp
+HERMESResults/
+results/
+output/
+outputs/
+
+# Large local data products
+*.tif
+*.tiff
+*.dat
+!tests/fixtures/**/*.tif
+!tests/fixtures/**/*.tiff
+!tests/fixtures/**/*.dat
+!docs/assets/*.png
+
+# Local manuscript and planning material
+journal-hermes/
+CODE_UNIFICATION_PLAN.md
+TEST_PLAN.md

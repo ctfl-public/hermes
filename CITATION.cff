@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+message: "If you use HERMES, please cite the HERMES software and related publication."
+title: "HERMES: Heterogeneous Effective Representative Multi-scale property Extraction Software"
+authors:
+  - family-names: Chacon
+    given-names: Luis A.
+  - family-names: Banerjee
+    given-names: Ayan
+  - family-names: Stoffel
+    given-names: Tyler D.
+  - family-names: Poovathingal
+    given-names: Savio J.
+repository-code: "https://github.com/ctfl-public/hermes"
+abstract: "A Python framework for automated microstructure volume generation and property extraction from XRCT data."
+keywords:
+  - XRCT
+  - microstructure
+  - image analysis
+  - porous composites
+  - mesh generation
+  - MPI
+license: "MIT"
+preferred-citation:
+  type: article
+  title: "A computational framework for automated microstructure volume generation and property extraction from x-ray computed tomography (XRCT) data"
+  authors:
+    - family-names: Chacon
+      given-names: Luis A.
+    - family-names: Banerjee
+      given-names: Ayan
+    - family-names: Stoffel
+      given-names: Tyler D.
+    - family-names: Poovathingal
+      given-names: Savio J.
+  journal: "Advances in Engineering Software"
+  year: 2026
+  notes: "Manuscript in preparation"
