@@ -1,0 +1,77 @@
+from __future__ import annotations
+
+import pytest
+
+
+pytestmark = pytest.mark.analytical
+
+
+def test_load_tiff_preserves_known_cube_shape_and_material_count(fixture_dir):
+    np = pytest.importorskip("numpy")
+    v2s = pytest.importorskip("voxel2stl")
+
+    tiff_volume = v2s.loadData(str(fixture_dir / "cube_16.tif"))
+
+    assert tiff_volume.shape == (16, 16, 16)
+    assert int(np.count_nonzero(tiff_volume)) == 8 * 8 * 8
+
+
+@pytest.mark.current_gap
+@pytest.mark.xfail(reason="Current DAT loader ignores the header dimensions and infers shape from material coordinates.")
+def test_load_tiff_and_dat_represent_same_known_cube(fixture_dir):
+    np = pytest.importorskip("numpy")
+    v2s = pytest.importorskip("voxel2stl")
+
+    tiff_volume = v2s.loadData(str(fixture_dir / "cube_16.tif"))
+    dat_volume = v2s.loadData(str(fixture_dir / "cube_16.dat"))
+
+    assert dat_volume.shape == tiff_volume.shape
+    assert np.array_equal((tiff_volume > 0).astype(int), dat_volume)
+
+
+def test_padding_adds_one_voxel_border_and_preserves_material_count(fixture_dir):
+    np = pytest.importorskip("numpy")
+    v2s = pytest.importorskip("voxel2stl")
+
+    volume = v2s.loadData(str(fixture_dir / "cube_16.tif"))
+    padded = v2s.createPadding(volume)
+
+    assert padded.shape == (18, 18, 18)
+    assert int(np.count_nonzero(padded)) == 8 * 8 * 8
+    assert np.all(padded[0, :, :] == 0)
+    assert np.all(padded[-1, :, :] == 0)
+    assert np.all(padded[:, 0, :] == 0)
+    assert np.all(padded[:, :, -1] == 0)
+
+
+def test_marching_cubes_cube_mesh_has_analytical_volume_within_voxel_tolerance(fixture_dir):
+    np = pytest.importorskip("numpy")
+    trimesh = pytest.importorskip("trimesh")
+    v2s = pytest.importorskip("voxel2stl")
+
+    volume = v2s.loadData(str(fixture_dir / "cube_16.tif"))
+    binary = v2s.createPadding(volume)
+    vertices, faces = v2s.getMesh(binary, 16, 1.0)
+    mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+
+    assert len(vertices) > 0
+    assert len(faces) > 0
+    assert mesh.is_watertight
+    # The analytical cuboid is 8x8x8 voxels. Marching cubes places the surface
+    # on half-voxel interfaces, so allow a small discretization tolerance.
+    assert abs(abs(mesh.volume) - 512.0) < 80.0
+    assert np.isfinite(mesh.area)
+
+
+@pytest.mark.current_gap
+@pytest.mark.xfail(reason="Current Chen writer emits zero-based coordinates while the loader expects one-based coordinates.")
+def test_chen_writer_round_trips_known_cube(tmp_path, fixture_dir):
+    np = pytest.importorskip("numpy")
+    v2s = pytest.importorskip("voxel2stl")
+
+    volume = v2s.loadData(str(fixture_dir / "cube_16.tif"))
+    out = tmp_path / "cube.dat"
+    v2s.writeChenFormat(str(out), volume, 1.0)
+
+    loaded = v2s.loadData(str(out))
+    assert np.array_equal((volume > 0).astype(int), loaded)

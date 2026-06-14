@@ -1,0 +1,1 @@
+"""HERMES characterization tests."""
