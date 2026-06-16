@@ -2,11 +2,14 @@
 import numpy as np
 import imageio
 from skimage import measure, filters, morphology
+from skimage.filters import (threshold_otsu, threshold_local, threshold_li, 
+                             threshold_yen, threshold_isodata, threshold_triangle)
 import trimesh
 import networkx as nx
 from scipy.ndimage import distance_transform_edt
 from skimage.feature import peak_local_max
 from scipy.spatial import cKDTree
+import pyvista as pv
 
 class Workspace:
     def __init__(self, matrix=None, voxel_size=1e-6, name="Workspace", origin=(0,0,0)):
@@ -125,6 +128,60 @@ class Workspace:
             self.generate_mesh()
         return trimesh.Trimesh(vertices=self.vertices, faces=self.faces)
     
+    # =========================================================================
+    # ADVANCED SEGMENTATION ENGINE (From HERMES.py)
+    # =========================================================================
+
+    def segment(self, method, invert=False, block_size=51, offset=10, min_manual=0, max_manual=255):
+        """
+        Binarizes the internal greyscale matrix using advanced threshold algorithms.
+        Converts self.matrix in place into a binary format (0 for void, 1 for solid features).
+        
+        :param method: "Otsu", "Adaptive", "Li", "Yen", "Isodata", "Triangle", or "Manual".
+        :param invert: False targets bright foreground objects (Fibers). True targets dark fields (Pores).
+        :param block_size: Odd integer bounding box size for local "Adaptive" calculation.
+        :param offset: Constant subtracted from local mean in "Adaptive" tracking.
+        :param min_manual: Minimum intensity floor bound used in "Manual" slicing.
+        :param max_manual: Maximum intensity cell ceiling bound used in "Manual" slicing.
+        """
+        method = method.strip().capitalize()
+        
+        if method == "Manual":
+            mask = (self.matrix >= min_manual) & (self.matrix <= max_manual)
+            self.matrix = mask.astype(np.uint16)
+            return
+
+        # Execute scikit-image automated filters
+        if method == "Otsu":
+            threshold = threshold_otsu(self.matrix)
+        elif method == "Adaptive":
+            if block_size % 2 == 0:
+                raise ValueError("Adaptive threshold block_size must be an ODD integer.")
+            threshold = threshold_local(self.matrix, block_size, offset=offset)
+        elif method == "Li":
+            threshold = threshold_li(self.matrix)
+        elif method == "Yen":
+            threshold = threshold_yen(self.matrix)
+        elif method == "Isodata":
+            threshold = threshold_isodata(self.matrix)
+        elif method == "Triangle":
+            threshold = threshold_triangle(self.matrix)
+        else:
+            raise ValueError(f"Unknown thresholding segmentation method variant: {method}")
+
+        # Construct binary arrays based on target object profile maps
+        if not invert:
+            mask = self.matrix > threshold
+        else:
+            mask = self.matrix < threshold
+            
+        # Clear out geometry cache hooks since the matrix underlying values changed
+        self.vertices = None
+        self.faces = None
+        
+        # Save array container state in place back to the grid domain
+        self.matrix = mask.astype(np.uint16)
+
     # =========================================================================
     # PROPERTIES QUANTIFICATION MODULES
     # =========================================================================
@@ -338,3 +395,52 @@ class Workspace:
     def _save_voxel_direction_map_txt(self, filename, d_map):
         coords = np.column_stack(np.where(~np.isnan(d_map[..., 0])))
         np.savetxt(filename, np.column_stack((coords, d_map[coords[:, 0], coords[:, 1], coords[:, 2]])), fmt="%.6f", header="x y z vx vy vz", comments='')
+
+    # =========================================================================
+    # Visualization MODULES
+    # =========================================================================
+    def visualize_matrix_cutoff(self, vmin, vmax, cmap="viridis"):
+        """
+        Visualizes the workspace's 3D matrix in PyVista, showing only values within a cutoff range.
+        Acts as an interactive voxel threshold slider similar to PuMA/ParaView.
+        
+        :param vmin: Minimum cutoff value to display.
+        :param vmax: Maximum cutoff value to display.
+        :param cmap: Colormap for the visualization (default is "viridis").
+        """
+
+        # 1. Initialize a PyVista 3D grid
+        # Add 1 to the shape because dimensions represent nodes, but data represents cells
+        grid = pv.ImageData()
+        grid.dimensions = np.array(self.matrix.shape) + 1
+        
+        # 2. Assign the matrix data to the grid
+        # Flattened in Fortran order (column-major) to align with VTK memory mapping
+        grid.cell_data["values"] = self.matrix.flatten(order="F")
+        
+        # 3. Apply the threshold filter to extract targeted voxels
+        thresholded_mesh = grid.threshold([vmin, vmax], scalars="values")
+        
+        # 4. Set up the interactive plotter
+        plotter = pv.Plotter()
+        
+        # Prevent crashes if the user selects a range with zero voxels
+        if thresholded_mesh.n_cells == 0:
+            print(f"No voxels found in the range [{vmin}, {vmax}] for workspace '{self.name}'.")
+            return
+            
+        # Render the thresholded mesh
+        plotter.add_mesh(
+            thresholded_mesh, 
+            scalars="values", 
+            cmap=cmap, 
+            show_edges=False, 
+            scalar_bar_args={"title": "Voxel Intensity"}
+        )
+        
+        # Add spatial context
+        plotter.add_axes()
+        plotter.add_bounding_box(color='black', line_width=1.5)
+        
+        # Launch the GUI window
+        plotter.show()
