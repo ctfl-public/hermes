@@ -1,0 +1,25 @@
+[project]
+name = "hermes-core"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Luis Chacon", email = "lchacon@corvidtec.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "imageio>=2.37.3",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.11.0",
+    "networkx>=3.6.1",
+    "numpy>=2.4.6",
+    "pyglet<2",
+    "scikit-image>=0.26.0",
+    "scipy>=1.17.1",
+    "tifffile>=2026.3.3",
+    "trimesh>=4.12.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.1,<0.11.0"]
+build-backend = "uv_build"
