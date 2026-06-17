@@ -32,6 +32,50 @@ def test_laplacian_smoothing_preserves_mesh_shape_and_marks_output_name(fixture_
     assert v2s.checkMesh(smoothed_vertices, smoothed_faces)
 
 
+def test_screened_poisson_reconstruction_uses_configured_depth(monkeypatch, fixture_dir):
+    np = pytest.importorskip("numpy")
+    v2s = pytest.importorskip("voxel2stl")
+
+    volume = v2s.createPadding(v2s.loadData(str(fixture_dir / "cube_16.tif")))
+    vertices, faces = v2s.getMesh(volume, 16, 1.0)
+    calls = []
+
+    class FakeMesh:
+        def vertex_matrix(self):
+            return vertices
+
+        def face_matrix(self):
+            return faces
+
+    class FakeMeshSet:
+        def apply_filter(self, name, **kwargs):
+            calls.append((name, kwargs))
+
+        def current_mesh(self):
+            return FakeMesh()
+
+    monkeypatch.setattr(v2s, "loadMeshPymeshlab", lambda in_vertices, in_faces: FakeMeshSet())
+
+    name, reconstructed_vertices, reconstructed_faces = v2s.stlSmoothing(
+        "cube",
+        vertices,
+        faces,
+        {
+            "laplacianFlag": False,
+            "laplacian_iter": None,
+            "ScreenedPoissonFlag": True,
+            "ScreenedPoisson_iter": 4,
+            "RemoveIslandsFlag": False,
+        },
+    )
+
+    assert name.endswith("_screened_poisson4")
+    assert calls == [("generate_surface_reconstruction_screened_poisson", {"depth": 4, "preclean": True})]
+    assert reconstructed_vertices.shape == vertices.shape
+    assert reconstructed_faces.shape == faces.shape
+    assert np.isfinite(reconstructed_vertices).all()
+
+
 @pytest.mark.pymeshlab
 def test_remove_floating_islands_keeps_largest_component(fixture_dir):
     pytest.importorskip("pymeshlab")
@@ -58,6 +102,47 @@ def test_remove_floating_islands_keeps_largest_component(fixture_dir):
     assert len(original_components) > 1
     assert len(cleaned_components) == 1
     assert cleaned_faces.shape[0] < faces.shape[0]
+
+
+def test_fix_mesh_runs_repair_filters_and_returns_valid_mesh(monkeypatch, fixture_dir):
+    v2s = pytest.importorskip("voxel2stl")
+
+    volume = v2s.createPadding(v2s.loadData(str(fixture_dir / "cube_16.tif")))
+    vertices, faces = v2s.getMesh(volume, 16, 1.0)
+    damaged_faces = faces[:-20]
+    calls = []
+
+    class FakeMesh:
+        def vertex_matrix(self):
+            return vertices
+
+        def face_matrix(self):
+            return faces
+
+    class FakeMeshSet:
+        def apply_filter(self, name, **kwargs):
+            calls.append((name, kwargs))
+
+        def current_mesh(self):
+            return FakeMesh()
+
+    monkeypatch.setattr(v2s, "loadMeshPymeshlab", lambda in_vertices, in_faces: FakeMeshSet())
+
+    assert not v2s.checkMesh(vertices, damaged_faces)
+
+    name, fixed_vertices, fixed_faces = v2s.fixMesh("damaged_cube", vertices, damaged_faces)
+
+    assert name.endswith("_Fixed")
+    assert [name for name, _ in calls] == [
+        "generate_surface_reconstruction_screened_poisson",
+        "meshing_remove_null_faces",
+        "meshing_repair_non_manifold_edges",
+        "meshing_repair_non_manifold_vertices",
+        "meshing_remove_duplicate_faces",
+        "meshing_remove_duplicate_vertices",
+        "meshing_re_orient_faces_coherently",
+    ]
+    assert v2s.checkMesh(fixed_vertices, fixed_faces)
 
 
 def test_centerline_analysis_writes_direction_map_with_expected_columns(tmp_path, fixture_dir):

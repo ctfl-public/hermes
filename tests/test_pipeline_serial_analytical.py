@@ -35,6 +35,26 @@ def test_serial_pipeline_writes_properties_for_known_cube(tmp_output, fixture_di
     assert len(list((tmp_output / "stl").glob("*.stl"))) == 1
 
 
+def test_serial_pipeline_exported_tiff_and_dat_preserve_known_crop_content(tmp_output, fixture_dir):
+    np = pytest.importorskip("numpy")
+    tiff = pytest.importorskip("tifffile")
+    v2s = pytest.importorskip("voxel2stl")
+
+    saving = base_saving_options(tmp_output, tiff_save=True, voxel_save=True)
+    crop = ([str(fixture_dir / "cube_16.tif")], [1.0], [(3, 5, 4)], 8)
+
+    v2s.voxel2stl("Corners", crop, base_surface_settings(), saving)
+
+    exported_tiff = next((tmp_output / "tiff").glob("*.tif"))
+    exported_dat = next((tmp_output / "voxel").glob("*.dat"))
+    tiff_volume = tiff.imread(exported_tiff)
+    dat_volume = v2s.loadData(str(exported_dat))
+
+    assert tiff_volume.shape == (8, 8, 8)
+    assert int(np.count_nonzero(tiff_volume)) == 8 * 8 * 8
+    assert np.array_equal((tiff_volume > 0).astype(int), dat_volume[1:-1, 1:-1, 1:-1])
+
+
 def test_serial_pipeline_corner_sampling_writes_one_output_per_corner(tmp_output, fixture_dir):
     v2s = pytest.importorskip("voxel2stl")
 

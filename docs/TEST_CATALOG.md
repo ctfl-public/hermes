@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-35 passed
+40 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -48,6 +48,11 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Checks: GUI imports and required widgets/buttons exist.
 - Pass tolerance: all listed widget names must be found.
 
+`test_gui_run_pipeline_builds_expected_serial_call`
+- Inputs: `HERMESGUI.ui`, `cube_16.tif`
+- Checks: the GUI can assemble a serial pipeline call from table entries, sampling controls, save controls, smoothing controls, and property controls.
+- Pass tolerance: crop mode exactly `Regular`, input filename and voxel size preserved exactly, volume length exactly `8`, requested volume count exactly `0`, TIFF saving enabled, Laplacian smoothing enabled with `2` iterations, and surface-area output enabled.
+
 ## IO And Mesh
 
 `test_load_tiff_preserves_known_cube_shape_and_material_count`
@@ -82,6 +87,11 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Checks: serial pipeline writes one property row, one STL, expected property columns, and porosity.
 - Pass tolerance: porosity `1 - 512 / 16^3` with `abs=0.03`.
 
+`test_serial_pipeline_exported_tiff_and_dat_preserve_known_crop_content`
+- Input: `cube_16.tif`
+- Checks: a regular crop exported as TIFF and sparse DAT preserves the known binary crop content.
+- Pass tolerance: exported TIFF shape exactly `(8, 8, 8)`, material count exactly `512`, and the reloaded DAT padded interior exactly equals the exported TIFF mask.
+
 `test_serial_pipeline_corner_sampling_writes_one_output_per_corner`
 - Input: `small_primary_0.tif`
 - Checks: two requested corners produce two TIFF outputs.
@@ -114,11 +124,21 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Checks: Laplacian smoothing runs on a known cube mesh, marks the output name, preserves array shapes, keeps finite vertices, and returns a valid volume mesh.
 - Pass tolerance: name suffix `_laplacian2`, unchanged vertex and face array shapes, all finite vertices, and `checkMesh()` true.
 
+`test_screened_poisson_reconstruction_uses_configured_depth`
+- Input: `cube_16.tif`
+- Checks: screened Poisson reconstruction is called when requested and receives the configured reconstruction depth.
+- Pass tolerance: output name suffix `_screened_poisson4`, exactly one reconstruction call with `depth=4` and `preclean=True`, unchanged reconstructed vertex and face array shapes, and all returned vertices finite.
+
 `test_remove_floating_islands_keeps_largest_component`
 - Input: `two_islands_24.tif`
 - Checks: optional island removal deletes disconnected small components and keeps one largest component.
 - Pass tolerance: original mesh has more than one component, cleaned mesh has exactly one component, and cleaned face count is lower than original face count.
 - Note: this test requires PyMeshLab and is skipped if PyMeshLab is unavailable.
+
+`test_fix_mesh_runs_repair_filters_and_returns_valid_mesh`
+- Input: `cube_16.tif`
+- Checks: mesh repair runs the expected cleanup filter sequence and returns a repaired mesh object.
+- Pass tolerance: output name suffix `_Fixed`, exact expected repair-filter sequence, and `checkMesh()` true for the repaired mesh.
 
 `test_centerline_analysis_writes_direction_map_with_expected_columns`
 - Input: `fiber_angle_48.tif`
@@ -158,6 +178,11 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: `layered_porosity_24.tif`
 - Checks: 3D porosity map file, row count, and valid porosity values.
 - Pass tolerance: file exists, exactly `4 * 4 * 4` rows, and porosity values only `{0.0, 1.0}`.
+
+`test_directional_porosity_plot_is_written`
+- Input: synthetic porosity series
+- Checks: the directional porosity plotting helper writes a figure file.
+- Pass tolerance: PNG output exists and has nonzero file size.
 
 ## MPI
 

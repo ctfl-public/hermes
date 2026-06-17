@@ -45,3 +45,20 @@ def test_porosity_3d_map_matches_known_block_values(repo_root, tmp_path, fixture
     assert out.exists()
     assert len(df) == 4 * 4 * 4
     assert set(df["Porosity"].unique()).issubset({0.0, 1.0})
+
+
+def test_directional_porosity_plot_is_written(repo_root, tmp_path):
+    dpp = load_direction_porosity_functions(repo_root)
+
+    out = tmp_path / "x_porosity.png"
+    dpp.plot_porosity_scatter(
+        [0, 1, 2, 3],
+        [0.0, 0.25, 0.5, 0.75],
+        str(out),
+        xlabel="Distance",
+        ylabel="Porosity",
+        labels=["synthetic"],
+    )
+
+    assert out.exists()
+    assert out.stat().st_size > 0
