@@ -37,10 +37,10 @@ python -m pytest
 The expected characterization-test result for this draft is:
 
 ```text
-21 passed, 5 xfailed
+29 passed
 ```
 
-The expected failures document known cleanup targets.
+In sandboxed environments, the MPI test may need permission for `mpirun` to open local communication sockets.
 
 ## Platform Notes
 

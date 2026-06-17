@@ -14,7 +14,7 @@ python -m pytest
 The expected result for this draft is:
 
 ```text
-21 passed, 5 xfailed
+29 passed
 ```
 
 ## Test Philosophy
@@ -44,16 +44,7 @@ Pytest also generates fixtures automatically in a temporary directory during nor
 
 For a plain-language description of each test, see [TEST_CATALOG.md](TEST_CATALOG.md).
 
-## Expected XFail Cases
+## MPI Note
 
-<!-- TODO: Update this list each time an expected-failure test is fixed during the cleanup. -->
-
-The current tests intentionally mark known gaps as `xfail`.
-
-- DAT loader ignores header dimensions.
-- DAT writer and loader disagree on zero-based versus one-based indexing.
-- MPI script is not yet a tiny-fixture command-line runner.
-- Centerline angle convention needs to be locked during cleanup.
-- Darker-greys thresholding can omit voxels equal to the threshold.
-
-These are documented cleanup targets.
+The MPI contract test launches `mpirun`.
+In sandboxed environments, `mpirun` may need permission to open local communication sockets.

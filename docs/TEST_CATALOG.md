@@ -1,193 +1,161 @@
 # HERMES Test Catalog
 
-This catalog describes the tests in plain language so the scientific contract can be reviewed without reading pytest code.
+This catalog describes the current pytest suite in plain language.
+The suite uses small generated fixtures so the scientific contracts can be reviewed without large paper-scale datasets.
 
-## Guiding Principle
+## Current Result
 
-Tests should compare HERMES outputs against analytical or known synthetic quantities whenever possible.
-Smoke tests are reserved for GUI, MPI, and optional dependency wiring.
+The expected local result in the HERMES Conda environment is:
 
-## Test Environment
-
-Use the canonical environment file at the repository root.
-
-```bash
-conda env create -f environment.yml
-conda activate hermes
-python -m pytest
+```text
+29 passed
 ```
 
-The older environment files are platform and history snapshots.
-`environment.yml` is the intended single environment for running the characterization tests and current HERMES functionality.
+The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
 
-## `tests/test_io_and_mesh.py`
+## Segmentation
 
-### `test_load_tiff_preserves_known_cube_shape_and_material_count`
+`test_global_thresholds_recover_known_bright_cube`
+- Inputs: `grayscale_two_phase_24.tif`, `grayscale_two_phase_mask_24.tif`
+- Methods: Otsu, Li, Yen, Isodata, Triangle
+- Checks: thresholded mask matches the known bright cube.
+- Pass tolerance: mismatch fraction `< 0.01`.
 
-This test loads a generated `16x16x16` TIFF cube.
-It verifies the shape and exact `8 * 8 * 8` material voxel count.
-It protects TIFF input behavior.
+`test_manual_threshold_recovers_exact_known_bright_cube`
+- Inputs: `grayscale_two_phase_24.tif`, `grayscale_two_phase_mask_24.tif`
+- Checks: manual range `(10000, 65535)` exactly recovers the known mask and porosity.
+- Pass tolerance: exact mask equality and porosity exact by `pytest.approx`.
 
-### `test_load_tiff_and_dat_represent_same_known_cube`
+`test_darker_greys_selects_complement_of_lighter_phase`
+- Input: `grayscale_two_phase_24.tif`
+- Checks: dark-phase selection is the exact complement of light-phase selection.
+- Pass tolerance: exact mask equality against the complement.
 
-This test loads a generated TIFF cube and an equivalent sparse voxel DAT file.
-It verifies exact shape and voxel equality.
-It is currently marked `xfail` because the current DAT loader ignores header dimensions.
+`test_adaptive_threshold_runs_on_gradient_fixture_and_returns_material_phase`
+- Input: `grayscale_gradient_24.tif`
+- Checks: adaptive thresholding returns a boolean mask with the original shape and selects material in the embedded cube.
+- Pass tolerance: at least one selected voxel in `[8:16, 8:16, 8:16]`.
 
-### `test_padding_adds_one_voxel_border_and_preserves_material_count`
+`test_gui_segmentation_thread_matches_manual_analytical_mask`
+- Inputs: `grayscale_two_phase_24.tif`, `grayscale_two_phase_mask_24.tif`
+- Checks: GUI `SegmentationThread` manual thresholding matches the analytical mask and porosity.
+- Pass tolerance: exact mask equality and porosity exact by `pytest.approx`.
 
-This test pads the known cube.
-It verifies the padded shape and confirms that material count is unchanged.
-It protects marching-cubes preprocessing.
+## GUI
 
-### `test_marching_cubes_cube_mesh_has_analytical_volume_within_voxel_tolerance`
+`test_gui_import_and_required_widgets_exist`
+- Input: `HERMESGUI.ui` through `HERMES.py`
+- Checks: GUI imports and required widgets/buttons exist.
+- Pass tolerance: all listed widget names must be found.
 
-This test converts the known cube to a mesh.
-It compares mesh volume to the analytical cube volume within a voxel-discretization tolerance.
-It protects STL and mesh geometry behavior.
+## IO And Mesh
 
-### `test_chen_writer_round_trips_known_cube`
+`test_load_tiff_preserves_known_cube_shape_and_material_count`
+- Input: `cube_16.tif`
+- Checks: TIFF loading preserves shape and material count.
+- Pass tolerance: shape exactly `(16, 16, 16)` and nonzero count exactly `512`.
 
-This test writes the known cube to sparse voxel DAT and reads it back.
-It verifies exact voxel equality.
-It is currently marked `xfail` because the writer and loader disagree on zero-based versus one-based indexing.
+`test_load_tiff_and_dat_represent_same_known_cube`
+- Inputs: `cube_16.tif`, `cube_16.dat`
+- Checks: TIFF and DAT imports represent the same cube.
+- Pass tolerance: exact shape equality and exact binary volume equality.
 
-## `tests/test_segmentation_analytical.py`
+`test_padding_adds_one_voxel_border_and_preserves_material_count`
+- Input: `cube_16.tif`
+- Checks: padding adds a one-voxel zero border and preserves material count.
+- Pass tolerance: shape exactly `(18, 18, 18)`, count exactly `512`, and checked borders exactly zero.
 
-### `test_global_thresholds_recover_known_bright_cube`
+`test_marching_cubes_cube_mesh_has_analytical_volume_within_voxel_tolerance`
+- Input: `cube_16.tif`
+- Checks: marching cubes produces vertices, faces, a watertight mesh, finite area, and cube-like volume.
+- Pass tolerance: `abs(abs(mesh.volume) - 512.0) < 80.0`.
 
-This test runs the global, entropy-based, iterative, and histogram-shape thresholding methods on a two-phase grayscale TIFF.
-It compares the selected material phase to a known analytical mask.
-It covers the documented thresholding methods and current GUI extras.
+`test_chen_writer_round_trips_known_cube`
+- Input: `cube_16.tif`, temporary DAT output
+- Checks: DAT writer output reloads to the original binary volume.
+- Pass tolerance: exact binary volume equality after write/read round trip.
 
-### `test_manual_threshold_recovers_exact_known_bright_cube`
+## Serial Pipeline
 
-This test applies manual min/max thresholding to a two-phase volume.
-It requires exact mask recovery and exact porosity.
-It protects the manual grayscale thresholding workflow.
+`test_serial_pipeline_writes_properties_for_known_cube`
+- Input: `cube_16.tif`
+- Checks: serial pipeline writes one property row, one STL, expected property columns, and porosity.
+- Pass tolerance: porosity `1 - 512 / 16^3` with `abs=0.03`.
 
-### `test_darker_greys_selects_complement_of_lighter_phase`
+`test_serial_pipeline_corner_sampling_writes_one_output_per_corner`
+- Input: `small_primary_0.tif`
+- Checks: two requested corners produce two TIFF outputs.
+- Pass tolerance: exactly `2` TIFF files.
 
-This test verifies that darker-phase selection is the complement of lighter-phase selection.
-It is currently marked `xfail` because the current `< threshold` comparison can omit voxels equal to the threshold.
+`test_random_sampling_small_jobs_write_requested_output_count`
+- Input: `solid_primary_24.tif`
+- Checks: four requested random subvolumes produce four TIFF outputs.
+- Pass tolerance: exactly `4` TIFF files.
 
-### `test_adaptive_threshold_runs_on_gradient_fixture_and_returns_material_phase`
+## Properties
 
-This test runs adaptive thresholding on a local-gradient synthetic image.
-It verifies that the bright embedded phase is detected.
-It protects the adaptive thresholding workflow.
+`test_fiber_diameter_for_known_cylinder_is_within_voxel_tolerance`
+- Input: `fiber_z_48.tif`
+- Checks: synthetic digital-cylinder fiber diameter and standard deviation.
+- Pass tolerance: mean diameter `8.5 +/- 0.75` and standard deviation `< 1.0`.
 
-### `test_gui_segmentation_thread_matches_manual_analytical_mask`
+`test_pore_distribution_for_known_void_cube_is_finite_and_near_expected_size`
+- Input: `porous_block_24.tif`
+- Checks: pore distribution is nonempty and near the known void size.
+- Pass tolerance: mean pore `11.5 +/- 2.0` and standard deviation `>= 0`.
 
-This test calls the GUI segmentation thread against a known analytical mask.
-It verifies that GUI thresholding agrees with the known truth.
-It requires GUI dependencies and is skipped if unavailable.
+`test_mesh_based_porosity_for_known_cuboid_is_close_to_analytical_value`
+- Input: `cube_16.tif`
+- Checks: mesh-derived porosity agrees with analytical cuboid porosity.
+- Pass tolerance: analytical porosity with `abs=0.03`.
 
-## `tests/test_properties_analytical.py`
+`test_single_angled_fiber_orientation_matches_current_reference_plane_convention`
+- Input: `fiber_angle_48.tif`
+- Checks: centerline azimuth, out-of-plane elevation, and length under the current reference-plane convention.
+- Pass tolerance: azimuth `90.0 - 22.34 +/- 3.0` degrees, elevation `0.0 +/- 3.0` degrees, and length `36.0 +/- 8.0`.
 
-### `test_fiber_diameter_for_known_cylinder_is_within_voxel_tolerance`
+## Directional Porosity
 
-This test computes fiber diameter on a synthetic cylinder of known radius.
-It verifies mean diameter near the expected digital-cylinder value and checks that standard deviation remains small.
-It protects the distance-transform feature-size method.
+`test_directional_porosity_matches_known_layered_volume`
+- Input: `layered_porosity_24.tif`
+- Checks: 1D porosity by layer.
+- Pass tolerance: locations exactly `[1, 6.0, 12.0, 18.0]` and porosity approximately `[1.0, 0.0, 1.0, 0.0]`.
 
-### `test_pore_distribution_for_known_void_cube_is_finite_and_near_expected_size`
+`test_porosity_3d_map_matches_known_block_values`
+- Input: `layered_porosity_24.tif`
+- Checks: 3D porosity map file, row count, and valid porosity values.
+- Pass tolerance: file exists, exactly `4 * 4 * 4` rows, and porosity values only `{0.0, 1.0}`.
 
-This test computes pore size on a material block with a known central void.
-It verifies that mean pore size is near the known void size.
-It protects the pore-size workflow in reduced form.
+## MPI
 
-### `test_mesh_based_porosity_for_known_cuboid_is_close_to_analytical_value`
+`test_mpi_environment_is_discoverable`
+- Inputs: none
+- Checks: `mpirun` and `mpi4py` availability.
+- Pass tolerance: present, or skipped if MPI is unavailable.
 
-This test computes porosity from mesh volume for the known cuboid.
-It compares against analytical porosity.
-It protects closed-volume-to-porosity logic.
+`test_mpi_tiny_fixture_matches_serial_contract`
+- Input: `cube_16.tif`
+- Checks: two-rank MPI CLI run completes one volume and writes expected outputs.
+- Pass tolerance: return code `0`, stdout contains `Completed 1 volumes`, exactly one STL is written, and `properties.txt` exists.
 
-### `test_single_angled_fiber_orientation_matches_analytical_angle`
+## Workspace Core
 
-This test generates a known angled fiber and checks centerline orientation and length.
-It is currently marked `xfail` because the angle convention needs to be locked during cleanup.
-It represents the synthetic-fiber orientation validation contract.
+`test_workspace_segments_known_grayscale_volume_and_extracts_subvolume`
+- Inputs: `grayscale_two_phase_24.tif`, `grayscale_two_phase_mask_24.tif`
+- Checks: `Workspace.segment()` matches the known mask and subvolume extraction preserves shape, count, origin, and name.
+- Pass tolerance: exact mask equality, shape `(12, 12, 12)`, count `1728`, and origin `(6, 6, 6)`.
 
-## `tests/test_directional_porosity_analytical.py`
+`test_workspace_mesh_and_properties_match_known_cube_scale`
+- Input: `cube_16.tif`
+- Checks: workspace mesh validity, closed volume, porosity, and finite surface area.
+- Pass tolerance: closed volume `512 +/- 80` and porosity `1 - 512 / 16^3 +/- 0.025`.
 
-### `test_directional_porosity_matches_known_layered_volume`
-
-This test uses a layered volume with an exact x-direction porosity profile.
-It verifies binned directional porosity exactly.
-It protects directional porosity post-processing.
-
-### `test_porosity_3d_map_matches_known_block_values`
-
-This test creates a 3D porosity map from the layered volume.
-It verifies block count and porosity values.
-It protects 3D porosity-map generation.
-
-## `tests/test_pipeline_serial_analytical.py`
-
-### `test_serial_pipeline_writes_properties_for_known_cube`
-
-This test runs the current serial pipeline on a known cube.
-It verifies STL output and property-file values.
-It protects the end-to-end serial workflow.
-
-### `test_serial_pipeline_corner_sampling_writes_one_output_per_corner`
-
-This test runs explicit corner sampling on a tiny primary volume.
-It verifies one output TIFF per requested corner.
-It protects single and corner sub-volume extraction.
-
-### `test_random_sampling_small_jobs_write_requested_output_count`
-
-This test runs random sampling on a solid tiny fixture.
-It verifies one output per requested sub-volume.
-It protects the basic random sampling contract.
-
-## `tests/test_mpi_contract.py`
-
-### `test_mpi_environment_is_discoverable`
-
-This test verifies that `mpirun` and `mpi4py` are available.
-It skips when MPI is not installed.
-
-### `test_mpi_tiny_fixture_matches_serial_contract`
-
-This test defines the desired MPI CLI behavior on a tiny analytical fixture.
-It is currently marked `xfail` because `voxel2stl_mpi.py` has hard-coded inputs and is not yet a reusable CLI.
-It protects the future MPI cleanup target.
-
-## `tests/test_gui_contract.py`
-
-### `test_gui_import_and_required_widgets_exist`
-
-This test instantiates the GUI and verifies core widgets exist.
-It is intentionally a wiring smoke test because analytical thresholding is covered separately.
+`test_workspace_saves_properties_table`
+- Input: `cube_16.tif`
+- Checks: workspace property table header and workspace name.
+- Pass tolerance: header starts with `WorkspaceName`, `surface_area`, and `closed_volume`, and the file includes `cube_16.tif`.
 
 ## Fixture Generator
 
 `scripts/make_test_fixtures.py` creates all small synthetic volumes used by the tests.
-
-- Binary cuboid.
-- Sparse voxel DAT version of the cuboid.
-- Empty volume.
-- Two disconnected islands.
-- Two-phase grayscale thresholding volume.
-- Gradient thresholding volume.
-- Straight fibers along x, y, and z.
-- Angled fiber.
-- Porous block.
-- Layered directional-porosity volume.
-- Three small primary volumes for multi-primary sampling.
-- Solid primary volume for random sampling output-count tests.
-
-These fixtures are deliberately tiny so the tests can run locally and in CI.
-
-## Known Gaps Captured As `xfail`
-
-- Centerline angle conventions need to be agreed upon and locked.
-- Current MPI script is not yet a tiny-fixture command-line runner.
-- Current darker-greys thresholding can omit voxels equal to the threshold.
-- DAT loading and DAT writing need one consistent coordinate convention.
-- Directional porosity utilities execute hard-coded paper paths at import time, so tests currently load only the function definitions to avoid that side effect.
-
-The cleanup should turn these `xfail` tests into passing tests.
+The fixtures include binary cubes, sparse DAT files, two-phase grayscale volumes, gradient thresholding volumes, straight and angled fibers, a porous block, layered porosity volumes, and small primary volumes for sampling tests.
