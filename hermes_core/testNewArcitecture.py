@@ -27,12 +27,12 @@ print(f"Mean Pore Diameter: {properties['pore_size_mean']:.2f} um")
 print(f"Mean Elevation Angle: {properties['elevation_mean']:.2f}°")
 print(f"Mean Azimuth Angle: {properties['azimuth_mean']:.2f}°")
 
-ws.save_voxel_data('outputs/voxelFiles/chenFormat.txt')
+ws.save_voxel_data(f'outputs/voxelFiles/{ws.name}_chenFormat.txt')
 ws.save_properties('outputs/propertiesFiles/results.txt')
 
-ws.export_stl('outputs/stlFiles/output.stl')
+ws.export_stl(f'outputs/stlFiles/{ws.name}.stl')
 mesh = ws.apply_smoothing({'laplacian':1})
-ws.export_stl('outputs/stlFiles/output_smooth.stl')
+ws.export_stl(f'outputs/stlFiles/{ws.name}_smooth.stl')
 
 
 # ws.visualize_matrix_cutoff_plt(vmin=1, vmax=1)

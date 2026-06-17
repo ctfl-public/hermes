@@ -142,8 +142,6 @@ class Workspace:
             return 
         
         mesh = self.get_trimesh()
-            
-        print("Applying smoothing...")
         
         if smoothing_params.get('laplacian'):
             mesh = trimesh.smoothing.filter_laplacian(
@@ -295,29 +293,68 @@ class Workspace:
             d_map, _, _ = self._map_direction_to_material_voxels(mat, d_coords, d_vecs, d_ids)
             self._save_voxel_direction_map_txt(save_dir_path, d_map)
 
-        return {"azimuth_mean": float(az_m), "azimuth_std": float(az_s), "elevation_mean": float(el_m), "elevation_std": float(el_s), "length_mean": float(len_m), "length_std": float(len_s)}
+        return  float(az_m), float(az_s), float(el_m), float(el_s), float(len_m), float(len_s)
 
-    def compute_all_properties(self, fiber_sphere=10, pore_sphere=30, plane='XY', step_size=4):
-        """Runs the entire characterization analytics portfolio and stores outputs in self.properties."""
+    def compute_surface_area(self):
         mesh = self.get_trimesh()
-        if mesh is None:
-            return self.properties
+        self.properties['surface_area'] = float(mesh.area)
+
+    def compute_closed_volume(self):
+        mesh = self.get_trimesh()
+        self.properties['closed_volume'] = float(mesh.volume)
+
+    def compute_volume_by_area(self):
+        mesh = self.get_trimesh()
+        self.properties['volume_by_area'] = float(mesh.volume / mesh.area) if mesh.area > 0 else 0.0
+
+    def compute_porosity(self):
+        mesh = self.get_trimesh()
+        unpadded_shape = [s - 2 * self.padding_size for s in self.matrix.shape]
+        volume_total = np.prod(unpadded_shape) * np.prod(self.voxel_size)
+        self.properties['porosity'] = float(1.0 - (mesh.volume / volume_total))
+
+    def compute_fiber_diameters(self, sphere_size):
+        f_mean, f_std, f_dist = self.compute_fiber_diameter(sphere_size)
+        self.properties.update({
+            'fiber_diameter_mean': f_mean, 
+            'fiber_diameter_std': f_std, 
+            'fiber_diameter_distribution': f_dist
+            })
+
+    def compute_pore_distributions(self, sphere_size):
+        p_mean, p_std, p_dist = self.compute_pore_distribution(sphere_size)
+        self.properties.update({
+            'pore_size_mean': p_mean, 
+            'pore_size_std': p_std,
+            'pore_size_distribution': p_dist
+        })
+
+    def compute_centerline_orientations(self, plane='XY', step_size=4, save_dir_path=None):
+        az_m, az_s, el_m, el_s, len_m, len_s = self.compute_centerline_orientation(plane=plane, step_size=step_size, save_dir_path=save_dir_path)
 
         self.properties.update({
-            'surface_area': float(mesh.area), 'closed_volume': float(mesh.volume),
-            'volume_by_area': float(mesh.volume / mesh.area) if mesh.area > 0 else 0.0
+            "azimuth_mean": az_m, 
+            "azimuth_std": az_s, 
+            "elevation_mean": el_m, 
+            "elevation_std": el_s, 
+            "length_mean": len_m, 
+            "length_std": len_s
         })
-        unpadded_shape = [s - 2 * self.padding_size for s in self.matrix.shape]
-        self.properties['porosity'] = float(1.0 - (mesh.volume / (np.prod(unpadded_shape) * np.prod(self.voxel_size))))
+    def compute_all_properties(self, fiber_sphere=10, pore_sphere=30, plane='XY', step_size=4):
+        """Runs the entire characterization analytics portfolio and stores outputs in self.properties."""
+        # Ensure mesh exists for geometric properties
+        if self.get_trimesh() is None:
+            self.generate_mesh()
+
+        # Execute modules
+        self.compute_surface_area()
+        self.compute_closed_volume()
+        self.compute_volume_by_area()
+        self.compute_porosity()
+        self.compute_fiber_diameters(fiber_sphere)
+        self.compute_pore_distributions(pore_sphere)
+        self.compute_centerline_orientations(plane=plane, step_size=step_size)
         
-        f_mean, f_std, f_dist = self.compute_fiber_diameter(fiber_sphere)
-        self.properties.update({'fiber_diameter_mean': f_mean, 'fiber_diameter_std': f_std, 'fiber_diameter_distribution': f_dist})
-        
-        p_mean, p_std, p_dist = self.compute_pore_distribution(pore_sphere)
-        self.properties.update({'pore_size_mean': p_mean, 'pore_size_std': p_std, 'pore_size_distribution': p_dist})
-        
-        cl_data = self.compute_centerline_orientation(plane=plane, step_size=step_size)
-        if cl_data: self.properties.update(cl_data)
         return self.properties
 
     # Private internal math helper functions
