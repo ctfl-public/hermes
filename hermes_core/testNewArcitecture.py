@@ -16,12 +16,10 @@ ws.pad()
 ws.generate_mesh()
 mesh = ws.get_trimesh()
 
-print(f"Successfully created a mesh for {ws.name}!")
-print(f"Surface Area: {mesh.area}")
+print(f'{ws.name} is a volume {ws.check_mesh()}!')
 
 properties = ws.compute_all_properties(fiber_sphere=10, pore_sphere=10, plane='XY')
 
-print(f"Porosity: {properties['porosity']:.4f}")
 print(f"Mean Fiber Diameter: {properties['fiber_diameter_mean']:.2f} um")
 print(f"Mean Pore Diameter: {properties['pore_size_mean']:.2f} um")
 print(f"Mean Elevation Angle: {properties['elevation_mean']:.2f}°")
@@ -32,7 +30,12 @@ ws.save_properties('outputs/propertiesFiles/results.txt')
 
 ws.export_stl(f'outputs/stlFiles/{ws.name}.stl')
 mesh = ws.apply_smoothing({'laplacian':1})
-ws.export_stl(f'outputs/stlFiles/{ws.name}_smooth.stl')
+
+print(f'{ws.name} is a volume {ws.check_mesh()}!')
+
+properties = ws.compute_all_properties(fiber_sphere=10, pore_sphere=10, plane='XY')
+ws.save_properties('outputs/propertiesFiles/results.txt')
+ws.export_stl(f'outputs/stlFiles/{ws.name}.stl')
 
 
 # ws.visualize_matrix_cutoff_plt(vmin=1, vmax=1)

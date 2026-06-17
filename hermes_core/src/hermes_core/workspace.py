@@ -129,6 +129,10 @@ class Workspace:
             self.generate_mesh()
         return trimesh.Trimesh(vertices=self.vertices, faces=self.faces)
     
+    def check_mesh(self):
+        mesh = self.get_trimesh()
+        return mesh.is_volume
+    
     def apply_smoothing(self, smoothing_params):
         """
         Applies requested smoothing filters to a provided trimesh object.
@@ -152,6 +156,7 @@ class Workspace:
 
             self.vertices = mesh.vertices
             self.faces = mesh.faces
+            self.name = self.name+'.laplacian'+str(smoothing_params['laplacian'])
 
         elif smoothing_params.get('ScreenPoisson'):
 
@@ -170,6 +175,8 @@ class Workspace:
             mesh = trimesh.Trimesh(vertices=self.vertices, faces=self.faces)
 
         return mesh
+    
+    
     # =========================================================================
     # ADVANCED SEGMENTATION ENGINE (From HERMES.py)
     # =========================================================================
@@ -354,7 +361,7 @@ class Workspace:
         self.compute_fiber_diameters(fiber_sphere)
         self.compute_pore_distributions(pore_sphere)
         self.compute_centerline_orientations(plane=plane, step_size=step_size)
-        
+
         return self.properties
 
     # Private internal math helper functions
