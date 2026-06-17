@@ -35,8 +35,6 @@ import multiprocessing
 import os
 from scipy.ndimage import distance_transform_edt
 from skimage.feature import peak_local_max
-from skimage.filters import (threshold_otsu, threshold_local, threshold_li, 
-                             threshold_yen, threshold_isodata, threshold_triangle)
 import re
 import json
 import networkx as nx
@@ -45,6 +43,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector
 import pyvista as pv
 from pyvistaqt import BackgroundPlotter, QtInteractor
+from hermes.segmentation import segment_greyscale
 
 class VoxelRenderingWindow(QDialog):
     def __init__(self, voxel_data, VoxelSizeX, VoxelSizeY, VoxelSizeZ, parent=None):
@@ -117,91 +116,36 @@ class SegmentationThread(QThread):
 
         
     def run(self):
-        minthreshold = ''
-        maxthreshold = ''
-        segmentation_mask = np.zeros_like(self.image_data, dtype=np.uint8)
-        if self.method == "Otsu":
-            threshold = threshold_otsu(self.image_data)
-            if self.GreyScaleSelectionindex == 0:
-                segmentation_mask = self.image_data > threshold
-                minthreshold = int(threshold)
-                maxthreshold = np.max(self.image_data)
-                print(f'min {minthreshold} max {maxthreshold}')
-            else:
-                segmentation_mask = self.image_data < threshold
-                minthreshold = 0
-                maxthreshold = int(threshold)
-                print(f'min {minthreshold} max {maxthreshold}')
-        elif self.method == "Adaptive":
-            if self.Blocksize.text() == '':
-                self.Blocksize = 51
-            else:
-                self.Blocksize = int(self.Blocksize.text())
-            if self.Blocksize % 2 == 0:  # Check if the number is odd
-                self.show_error_message("Even Number", "Please enter an **odd** number.")
-                return
-            threshold = threshold_local(self.image_data, self.Blocksize, offset=10)
-            if self.GreyScaleSelectionindex == 0:
-                segmentation_mask = self.image_data > threshold
-            else:
-                segmentation_mask = self.image_data < threshold
-        elif self.method == "Li":
-            threshold = threshold_li(self.image_data)
-            if self.GreyScaleSelectionindex == 0:
-                segmentation_mask = self.image_data > threshold
-                minthreshold = int(threshold)
-                maxthreshold = np.max(self.image_data)
-                print(f'min {minthreshold} max {maxthreshold}')
-            else:
-                segmentation_mask = self.image_data < threshold
-                minthreshold = 0
-                maxthreshold = int(threshold) 
-                print(f'min {minthreshold} max {maxthreshold}')
-        elif self.method == "Yen":
-            threshold = threshold_yen(self.image_data)
-            if self.GreyScaleSelectionindex == 0:
-                segmentation_mask = self.image_data > threshold
-                minthreshold = int(threshold)
-                maxthreshold = np.max(self.image_data)
-            else:
-                segmentation_mask = self.image_data < threshold
-                minthreshold = 0
-                maxthreshold = int(threshold)
-        elif self.method == "Isodata":
-            threshold = threshold_isodata(self.image_data)
-            if self.GreyScaleSelectionindex == 0:
-                segmentation_mask = self.image_data > threshold
-                minthreshold = int(threshold)
-                maxthreshold = np.max(self.image_data)
-            else:
-                segmentation_mask = self.image_data < threshold
-                minthreshold = 0
-                maxthreshold = int(threshold)
-        elif self.method == "Triangle":
-            threshold = threshold_triangle(self.image_data)
-            if self.GreyScaleSelectionindex == 0:
-                segmentation_mask = self.image_data > threshold
-                minthreshold = int(threshold)
-                maxthreshold = np.max(self.image_data)
-            else:
-                segmentation_mask = self.image_data < threshold
-                minthreshold = 0
-                maxthreshold = int(threshold)
-        elif self.method == "Manual":
-            if self.minManual == '':
-                self.minManual = 0
-            else:
-                self.minManual = int(self.minManual)
-            if self.maxManual == '':
-                self.maxManual = 255
-            else:
-                self.maxManual = int(self.maxManual)
-            segmentation_mask = (self.image_data > self.minManual) & (self.image_data < self.maxManual)
-            minthreshold = self.minManual
-            maxthreshold = self.maxManual
-        
-        porosity = np.sum(segmentation_mask == False) / segmentation_mask.size
-        self.finished.emit(segmentation_mask, str(minthreshold), str(maxthreshold), porosity)
+        try:
+            block_size = self._coerce_int_input(self.Blocksize, default=51)
+            min_manual = self._coerce_int_input(self.minManual, default=0)
+            max_manual = self._coerce_int_input(self.maxManual, default=255)
+            result = segment_greyscale(
+                self.image_data,
+                self.method,
+                select_lighter=self.GreyScaleSelectionindex == 0,
+                block_size=block_size,
+                min_manual=min_manual,
+                max_manual=max_manual,
+            )
+        except ValueError as exc:
+            self.show_error_message("Invalid Segmentation Input", str(exc))
+            return
+
+        self.finished.emit(
+            result.mask,
+            str(result.min_threshold),
+            str(result.max_threshold),
+            result.porosity,
+        )
+
+    @staticmethod
+    def _coerce_int_input(value, default):
+        if hasattr(value, "text"):
+            value = value.text()
+        if value == "":
+            return default
+        return int(value)
 
     def show_error_message(self, title, message):
         """Displays an error message box."""

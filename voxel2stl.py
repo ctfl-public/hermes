@@ -22,6 +22,9 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import json
 from numbers import Number
 from scipy.spatial import cKDTree
+from hermes.io import load_volume, write_chen_format
+from hermes.mesh import check_mesh, create_padding, generate_mesh, load_trimesh
+from hermes.properties import fiber_diameter_distribution, pore_distribution
 
 def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
 
@@ -178,21 +181,7 @@ def process_single_volume(args):
     return f"Processed corner {temp_number} of {surf}"
 
 def loadData(surf):
-    if surf.endswith('.tif') or surf.endswith('.tiff'):
-        # Load the TIFF file
-        image_volume = imageio.volread(surf)
-        image_volume = np.transpose(image_volume, (2, 1, 0))
-    
-    elif surf.endswith('.txt') or surf.endswith('.dat'):
-        tempdata = np.loadtxt(surf, skiprows=2)
-        xmax = int(max(tempdata[:, 0]))
-        ymax = int(max(tempdata[:, 1]))
-        zmax = int(max(tempdata[:, 2]))
-        image_volume = np.zeros((xmax, ymax, zmax), dtype='int')
-        for val in tempdata:
-            image_volume[int(val[0]) - 1, int(val[1]) - 1, int(val[2]) - 1] = int(val[3])
-            
-    return image_volume
+    return load_volume(surf)
 
 def getstl(surfacename, tifvoxelsize, temp_number,volumeLength, corner, surfaceSettings, savingOptions): 
     
@@ -268,70 +257,13 @@ def getstl(surfacename, tifvoxelsize, temp_number,volumeLength, corner, surfaceS
     
 
 def createPadding(image_volume):
-    # Set the desired padding size (in pixels) for each dimension
-    padding_size = 1  # Adjust this value based on your needs
-    
-    # Create a padded volume with the same data type as the original image
-    padded_volume = np.zeros(
-        (image_volume.shape[0] + 2 * padding_size,
-         image_volume.shape[1] + 2 * padding_size,
-         image_volume.shape[2] + 2 * padding_size),
-        dtype=image_volume.dtype,
-    )
-    
-    # Calculate padding ranges for each dimension
-    x_range = slice(padding_size, padding_size + image_volume.shape[0])
-    y_range = slice(padding_size, padding_size + image_volume.shape[1])
-    z_range = slice(padding_size, padding_size + image_volume.shape[2])
-    
-    # Copy the original image into the center of the padded volume
-    padded_volume[x_range, y_range, z_range] = image_volume
-    
-    
-    #Load padded volume
-    binary_volume = np.squeeze(np.array(padded_volume))
-    
-    return binary_volume
+    return create_padding(image_volume)
 
 def writeChenFormat(tempName,binary_volume,tifvoxelsize):
-    file1 = open(tempName,'w')
-    #chen files
-    x_i,y_j,z_k = np.shape(binary_volume)
-    file1.write(str(x_i-1)+' '+str(y_j-1)+' '+str(z_k-1)+' '+str(tifvoxelsize*10**-6)+'\n')
-    file1.write("i j k voxel")
-    count = 1
-    for i in range(x_i):
-        for j in range(y_j):
-            for k in range(z_k):
-                if binary_volume[i, j, k] == 1:
-                   value = int(binary_volume[i, j, k])
-                   file1.write(f"\n{i} {j} {k} {value}")
-                   count = count + 1
-                   # print(f"Point ({i}, {j}, {k}) has a value of 1")
-                # else:
-                    # print(f"Point ({i}, {j}, {k}) does not have a value of 1")#print(f"Point ({i}, {j}, {k}): {temp_volume[i, j, k]}")
-    file1.close()
+    write_chen_format(tempName, binary_volume, tifvoxelsize)
 
 def getMesh(binary_volume,length,voxel_size):
-    
-    # Create a mesh using the marching cubes algorithm
-    vertices, faces, _, _ = measure.marching_cubes(binary_volume, allow_degenerate=False, method='lewiner')  ##add the parallel marching cubes here
-    
-    # # Swap x and z to make it match the tif
-    # # Indices of the columns you want to swap
-    # column_index1 = 0  # Replace with the index of the first column
-    # column_index2 = 2  # Replace with the index of the second column
-    
-    # # Swap the columns using array indexing
-    # vertices[:, [column_index1, column_index2]] = vertices[:, [column_index2, column_index1]]
- 
-    # Convert vertices to physical coordinates using voxel size
-    vertices = vertices * voxel_size - voxel_size
-
-    # Flip normals by reversing face winding
-    faces = faces[:, ::-1]
-    
-    return vertices, faces
+    return generate_mesh(binary_volume, voxel_size)
 
 def stlSmoothing(FileName, vertices, faces, surfaceSettings ):
     
@@ -374,7 +306,7 @@ def stlSmoothing(FileName, vertices, faces, surfaceSettings ):
     return FileName, vertices, faces
 
 def loadMeshTrimesh(vertices,faces):
-    return trimesh.Trimesh(vertices=vertices, faces=faces)
+    return load_trimesh(vertices, faces)
 
 def loadMeshPymeshlab(vertices,faces):
     import pymeshlab as ml
@@ -403,11 +335,7 @@ def remove_floating_islands_Stl(vertices,faces):
     return ms
 
 def checkMesh(vertices,faces):
-    mesh = loadMeshTrimesh(vertices,faces)
-    manifoldMesh =  mesh.is_volume
-    # watertightMesh = mesh.is_watertight
-    
-    return manifoldMesh
+    return check_mesh(vertices, faces)
 
 def fixMesh(FileName,vertices,faces):
     print('trying to fix it', FileName)
@@ -498,50 +426,10 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
     writeProperties(savingOptions, propertyNames, propertyList)
 
 def getPoreDistribution(image_volume, tifvoxelsize, sphereSize):
-    # Invert image_volume
-    image_volume = (image_volume == 0).astype(int)
-
-    # Distance transform
-    distance_transform = distance_transform_edt(image_volume)
-    
-    # Detect local maxima
-    local_maxima_coords = peak_local_max(distance_transform, min_distance=int(0.5*sphereSize/tifvoxelsize), labels=image_volume.astype(int))
-
-    # Measure diameters
-    poreDistribution = []
-    
-    for max_coords in local_maxima_coords:
-        distances = distance_transform[tuple(max_coords)]
-        poreDistribution.append(2 * np.max(distances))
-    
-    # Scale given voxel size
-    poreDistribution = np.multiply(poreDistribution,tifvoxelsize)-tifvoxelsize/2
-    
-    meanPore = np.mean(poreDistribution)
-    stdPore = np.std(poreDistribution)
-    
-    return meanPore, stdPore, poreDistribution
+    return pore_distribution(image_volume, tifvoxelsize, sphereSize)
 
 def getDiamter(image_volume,tifvoxelsize,sphereSize):
-    # Distance transform
-    distance_transform = distance_transform_edt(image_volume)
-    
-    # Detect local maxima
-    local_maxima_coords = peak_local_max(distance_transform, min_distance=int(0.5*sphereSize/tifvoxelsize), labels=image_volume.astype(int))
-    
-    # Measure diameters
-    fiber_diameters = []
-    
-    for max_coords in local_maxima_coords:
-        distances = distance_transform[tuple(max_coords)]
-        fiber_diameters.append(2 * np.max(distances))
-    
-    # Scale given voxel size
-    fiber_diameters = np.multiply(fiber_diameters,tifvoxelsize)-tifvoxelsize/2
-    
-    meanDiameter = np.mean(fiber_diameters)
-    stdDiameter = np.std(fiber_diameters)
-    
+    meanDiameter, stdDiameter, _ = fiber_diameter_distribution(image_volume, tifvoxelsize, sphereSize)
     return meanDiameter, stdDiameter
 
 def analyzeCenterLine(image,tifvoxelsize,surfacename,plane='XY'):

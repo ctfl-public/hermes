@@ -7,29 +7,18 @@ pytestmark = pytest.mark.analytical
 
 
 def _run_skimage_threshold(method, image, select_lighter=True, block_size=9, manual=(0, 65535)):
-    filters = pytest.importorskip("skimage.filters")
-    if method == "Otsu":
-        threshold = filters.threshold_otsu(image)
-        return image > threshold if select_lighter else image < threshold
-    if method == "Li":
-        threshold = filters.threshold_li(image)
-        return image > threshold if select_lighter else image < threshold
-    if method == "Yen":
-        threshold = filters.threshold_yen(image)
-        return image > threshold if select_lighter else image < threshold
-    if method == "Isodata":
-        threshold = filters.threshold_isodata(image)
-        return image > threshold if select_lighter else image < threshold
-    if method == "Triangle":
-        threshold = filters.threshold_triangle(image)
-        return image > threshold if select_lighter else image < threshold
-    if method == "Adaptive":
-        threshold = filters.threshold_local(image, block_size, offset=10)
-        return image > threshold if select_lighter else image < threshold
-    if method == "Manual":
-        lo, hi = manual
-        return (image > lo) & (image < hi)
-    raise ValueError(method)
+    from hermes.segmentation import segment_greyscale
+
+    lo, hi = manual
+    result = segment_greyscale(
+        image,
+        method,
+        select_lighter=select_lighter,
+        block_size=block_size,
+        min_manual=lo,
+        max_manual=hi,
+    )
+    return result.mask
 
 
 @pytest.mark.parametrize("method", ["Otsu", "Li", "Yen", "Isodata", "Triangle"])
@@ -59,8 +48,6 @@ def test_manual_threshold_recovers_exact_known_bright_cube(fixture_dir):
     assert actual_porosity == pytest.approx(expected_porosity)
 
 
-@pytest.mark.current_gap
-@pytest.mark.xfail(reason="Current darker-greys threshold uses '< threshold', which can omit voxels equal to the threshold.")
 def test_darker_greys_selects_complement_of_lighter_phase(fixture_dir):
     np = pytest.importorskip("numpy")
     tiff = pytest.importorskip("tifffile")
