@@ -49,9 +49,7 @@ def test_mesh_based_porosity_for_known_cuboid_is_close_to_analytical_value(fixtu
     assert mesh_porosity == pytest.approx(analytical_porosity, abs=0.03)
 
 
-@pytest.mark.current_gap
-@pytest.mark.xfail(reason="Current centerline angle conventions need to be locked during cleanup.")
-def test_single_angled_fiber_orientation_matches_analytical_angle(fixture_dir):
+def test_single_angled_fiber_orientation_matches_current_reference_plane_convention(fixture_dir):
     v2s = pytest.importorskip("voxel2stl")
     tiff = pytest.importorskip("tifffile")
 
@@ -60,5 +58,6 @@ def test_single_angled_fiber_orientation_matches_analytical_angle(fixture_dir):
         image, 1.0, str(fixture_dir / "fiber_angle_48.tif"), plane="XZ"
     )
 
-    assert elevation == pytest.approx(22.34, abs=3.0)
+    assert azimuth == pytest.approx(90.0 - 22.34, abs=3.0)
+    assert elevation == pytest.approx(0.0, abs=3.0)
     assert length == pytest.approx(36.0, abs=8.0)

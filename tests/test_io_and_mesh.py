@@ -16,8 +16,6 @@ def test_load_tiff_preserves_known_cube_shape_and_material_count(fixture_dir):
     assert int(np.count_nonzero(tiff_volume)) == 8 * 8 * 8
 
 
-@pytest.mark.current_gap
-@pytest.mark.xfail(reason="Current DAT loader ignores the header dimensions and infers shape from material coordinates.")
 def test_load_tiff_and_dat_represent_same_known_cube(fixture_dir):
     np = pytest.importorskip("numpy")
     v2s = pytest.importorskip("voxel2stl")
@@ -63,8 +61,6 @@ def test_marching_cubes_cube_mesh_has_analytical_volume_within_voxel_tolerance(f
     assert np.isfinite(mesh.area)
 
 
-@pytest.mark.current_gap
-@pytest.mark.xfail(reason="Current Chen writer emits zero-based coordinates while the loader expects one-based coordinates.")
 def test_chen_writer_round_trips_known_cube(tmp_path, fixture_dir):
     np = pytest.importorskip("numpy")
     v2s = pytest.importorskip("voxel2stl")
