@@ -67,6 +67,9 @@ class Workspace:
         name = filepath.split('/')[-1].split('\\')[-1]
         return cls(matrix=image_volume, voxel_size=voxel_size, name=name)
 
+    # =========================================================================
+    # Sampling module
+    # =========================================================================
     def extract_subvolume(self, corner, dimensions, sub_id=0):
         """
         Crops the matrix and returns a NEW Workspace object for the subvolume.
@@ -91,6 +94,45 @@ class Workspace:
             origin=(x, y, z)
         )
 
+    def sample_subvolumes(self, mode='deterministic', num_samples=10, sub_dims=(50, 50, 50)):
+        """
+        Samples subvolumes from the current matrix.
+        
+        :param mode: 'deterministic' (grid) or 'stochastic' (random).
+        :param num_samples: Number of volumes for stochastic mode. 
+                           For deterministic, this is ignored (uses grid calculation).
+        :param sub_dims: Tuple of (dx, dy, dz) dimensions for the subvolumes.
+        :return: List of Workspace objects.
+        """
+        subvolumes = []
+        dx, dy, dz = sub_dims
+        Mx, My, Mz = self.matrix.shape
+
+        if mode == 'deterministic':
+            # Create a Cartesian grid of samples
+            for x in range(0, Mx - dx + 1, dx):
+                for y in range(0, My - dy + 1, dy):
+                    for z in range(0, Mz - dz + 1, dz):
+                        subvolumes.append(self.extract_subvolume((x, y, z), (dx, dy, dz), sub_id=len(subvolumes)))
+            print(f"Deterministic sampling created {len(subvolumes)} subvolumes.")
+
+        elif mode == 'stochastic':
+            # Randomly sample N times
+            for i in range(num_samples):
+                x = np.random.randint(0, Mx - dx)
+                y = np.random.randint(0, My - dy)
+                z = np.random.randint(0, Mz - dz)
+                subvolumes.append(self.extract_subvolume((x, y, z), (dx, dy, dz), sub_id=i))
+            print(f"Stochastic sampling created {num_samples} subvolumes.")
+            
+        else:
+            raise ValueError("Mode must be 'deterministic' or 'stochastic'.")
+
+        return subvolumes
+    
+    # =========================================================================
+    # Meshing Module
+    # =========================================================================
     def pad(self, padding_size=1):
         """
         Pads the workspace matrix. (Replaces your createPadding function)
@@ -125,19 +167,30 @@ class Workspace:
         
     def get_trimesh(self):
         """Helper to quickly return a trimesh object for smoothing/export."""
+        if np.sum(self.matrix) == 0:
+            print(f'{self.name} is empty')
+            return None
         if self.vertices is None or self.faces is None:
             self.generate_mesh()
         return trimesh.Trimesh(vertices=self.vertices, faces=self.faces)
     
     def check_mesh(self):
+        """
+        Check if mesh is a volume (no non-manifolds)
+        
+        :param self: Description
+        :return: True or false
+        """
         mesh = self.get_trimesh()
-        return mesh.is_volume
+        if mesh:
+            return mesh.is_volume
+        else:
+            return None
     
     def apply_smoothing(self, smoothing_params):
         """
         Applies requested smoothing filters to a provided trimesh object.
         
-        :param mesh: trimesh object to be smoothed.
         :param smoothing_params: Dictionary containing filter options.
         :return: Smoothed trimesh object.
         """
@@ -239,7 +292,7 @@ class Workspace:
         """Calculates internal localized thickness diameter trends using an anisotropic distance EDT map."""
         mat = self.matrix[self.padding_size:-self.padding_size, self.padding_size:-self.padding_size, self.padding_size:-self.padding_size] if self.padding_size > 0 else self.matrix
         if np.sum(mat) == 0:
-            return 0.0, 0.0
+            return 0.0, 0.0, []
 
         distance_transform = distance_transform_edt(mat, sampling=self.voxel_size)
         min_dist_voxels = max(1, int(0.5 * sphere_size_um / np.min(self.voxel_size)))
@@ -266,13 +319,13 @@ class Workspace:
         """Skeletonizes structures into network graphs to resolve tensor orientation profiles and structural vectors."""
         mat = self.matrix[self.padding_size:-self.padding_size, self.padding_size:-self.padding_size, self.padding_size:-self.padding_size] if self.padding_size > 0 else self.matrix
         if np.sum(mat) == 0:
-            return None
+            return None, None, None, None, None, None
 
         smoothed = (filters.gaussian(mat, sigma=1) >= np.max(filters.gaussian(mat, sigma=1)) * 0.5).astype(np.uint8)
         skeleton = morphology.skeletonize(smoothed)
         coords = np.column_stack(np.where(skeleton > 0))
         if coords.shape[0] == 0:
-            return None
+            return None, None, None, None, None, None
 
         G = nx.Graph()
         for pt in coords: G.add_node(tuple(pt))
@@ -292,7 +345,7 @@ class Workspace:
         props, d_coords, d_vecs, d_ids = self._calculate_centerline_properties(split_cl, mat, plane=plane, step_size=step_size)
         
         if props.size == 0:
-            return None
+            return None, None, None, None, None, None 
         az_m, el_m, len_m = np.mean(props, axis=0)
         az_s, el_s, len_s = np.std(props, axis=0)
 
@@ -304,23 +357,35 @@ class Workspace:
 
     def compute_surface_area(self):
         mesh = self.get_trimesh()
-        self.properties['surface_area'] = float(mesh.area)
+        if mesh:
+            self.properties['surface_area'] = float(mesh.area)
+        else:
+            self.properties['surface_area'] = float(0)
 
     def compute_closed_volume(self):
         mesh = self.get_trimesh()
-        self.properties['closed_volume'] = float(mesh.volume)
+        if mesh:
+            self.properties['closed_volume'] = float(mesh.volume)
+        else:
+            self.properties['closed_volume'] = float(0)
 
     def compute_volume_by_area(self):
         mesh = self.get_trimesh()
-        self.properties['volume_by_area'] = float(mesh.volume / mesh.area) if mesh.area > 0 else 0.0
-
+        if mesh:
+            self.properties['volume_by_area'] = float(mesh.volume / mesh.area) if mesh.area > 0 else 0.0
+        else:
+            self.properties['volume_by_area'] = float(0)
     def compute_porosity(self):
         mesh = self.get_trimesh()
-        unpadded_shape = [s - 2 * self.padding_size for s in self.matrix.shape]
-        volume_total = np.prod(unpadded_shape) * np.prod(self.voxel_size)
-        self.properties['porosity'] = float(1.0 - (mesh.volume / volume_total))
+        if mesh:
+            unpadded_shape = [s - 2 * self.padding_size for s in self.matrix.shape]
+            volume_total = np.prod(unpadded_shape) * np.prod(self.voxel_size)
+            self.properties['porosity'] = float(1.0 - (mesh.volume / volume_total))
+        else:
+            self.properties['porosity'] = float(1.0)
 
     def compute_fiber_diameters(self, sphere_size):
+
         f_mean, f_std, f_dist = self.compute_fiber_diameter(sphere_size)
         self.properties.update({
             'fiber_diameter_mean': f_mean, 
@@ -350,7 +415,7 @@ class Workspace:
     def compute_all_properties(self, fiber_sphere=10, pore_sphere=30, plane='XY', step_size=4):
         """Runs the entire characterization analytics portfolio and stores outputs in self.properties."""
         # Ensure mesh exists for geometric properties
-        if self.get_trimesh() is None:
+        if np.sum(self.matrix) != 0:
             self.generate_mesh()
 
         # Execute modules
@@ -540,7 +605,7 @@ class Workspace:
             if "WorkspaceName" not in f.read():
                 f.write(header)
             f.write(line)
-        print(f'Saving properties to {filepath}')
+        print(f'Saving properties of {self.name} to {filepath}')
 
     def _get_versioned_path(self, filepath):
         """

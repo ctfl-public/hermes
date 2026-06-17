@@ -37,5 +37,18 @@ properties = ws.compute_all_properties(fiber_sphere=10, pore_sphere=10, plane='X
 ws.save_properties('outputs/propertiesFiles/results.txt')
 ws.export_stl(f'outputs/stlFiles/{ws.name}.stl')
 
+print(ws.matrix.shape)
+
+deterministic_samples = ws.sample_subvolumes(mode='deterministic', sub_dims=(10, 10, 10))
+
+for sub_ws in deterministic_samples:
+    sub_ws.compute_all_properties(fiber_sphere=10, pore_sphere=10, plane='XY')
+    sub_ws.save_properties('outputs/propertiesFiles/results_deterministic.txt')
+
+stochastic_samples = ws.sample_subvolumes(mode='stochastic',num_samples=20, sub_dims=(10, 10, 10))
+
+for sub_ws in stochastic_samples:
+    sub_ws.compute_all_properties(fiber_sphere=10, pore_sphere=10, plane='XY')
+    sub_ws.save_properties('outputs/propertiesFiles/results_stochastic.txt')
 
 # ws.visualize_matrix_cutoff_plt(vmin=1, vmax=1)
