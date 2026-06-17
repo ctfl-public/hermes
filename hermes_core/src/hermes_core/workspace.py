@@ -10,6 +10,7 @@ from scipy.ndimage import distance_transform_edt
 from skimage.feature import peak_local_max
 from scipy.spatial import cKDTree
 import pyvista as pv
+from pathlib import Path
 
 class Workspace:
     def __init__(self, matrix=None, voxel_size=1e-6, name="Workspace", origin=(0,0,0)):
@@ -128,6 +129,49 @@ class Workspace:
             self.generate_mesh()
         return trimesh.Trimesh(vertices=self.vertices, faces=self.faces)
     
+    def apply_smoothing(self, smoothing_params):
+        """
+        Applies requested smoothing filters to a provided trimesh object.
+        
+        :param mesh: trimesh object to be smoothed.
+        :param smoothing_params: Dictionary containing filter options.
+        :return: Smoothed trimesh object.
+        """
+        if not smoothing_params:
+            print('No smoothing filter specified!')
+            return 
+        
+        mesh = self.get_trimesh()
+            
+        print("Applying smoothing...")
+        
+        if smoothing_params.get('laplacian'):
+            mesh = trimesh.smoothing.filter_laplacian(
+                mesh, 
+                iterations=smoothing_params['laplacian'],
+                volume_constraint=True
+            )
+
+            self.vertices = mesh.vertices
+            self.faces = mesh.faces
+
+        elif smoothing_params.get('ScreenPoisson'):
+
+            import pymeshlab as ml
+            meshTarget = ml.Mesh(mesh.vertices,mesh.faces) 
+            ms = ml.MeshSet(verbose=True)
+            ms.add_mesh(meshTarget)
+
+            ms.apply_filter('generate_surface_reconstruction_screened_poisson', depth=smoothing_params['ScreenPoisson'], preclean=True)
+            
+            mesh = ms.current_mesh()
+
+            self.vertices = mesh.vertex_matrix()
+            self.faces = mesh.face_matrix() 
+
+            mesh = trimesh.Trimesh(vertices=self.vertices, faces=self.faces)
+
+        return mesh
     # =========================================================================
     # ADVANCED SEGMENTATION ENGINE (From HERMES.py)
     # =========================================================================
@@ -397,6 +441,97 @@ class Workspace:
         np.savetxt(filename, np.column_stack((coords, d_map[coords[:, 0], coords[:, 1], coords[:, 2]])), fmt="%.6f", header="x y z vx vy vz", comments='')
 
     # =========================================================================
+    # Output MODULES
+    # =========================================================================
+
+    def save_voxel_data(self, filepath):
+        """Saves current binarized matrix to a .dat file (Chen format)."""
+
+        path = Path(filepath)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        
+        x_i, y_j, z_k = self.matrix.shape
+        with open(filepath, 'w') as f:
+            f.write(f"{x_i-1} {y_j-1} {z_k-1} {self.voxel_size[0]*10**-6}\n")
+            f.write("i j k voxel")
+            coords = np.column_stack(np.where(self.matrix == 1))
+            for pt in coords:
+                f.write(f"\n{pt[0]} {pt[1]} {pt[2]} 1")
+
+    def export_stl(self, filepath):
+        """Generates and exports the mesh to STL."""
+
+        self._make_parent_path(filepath)
+        
+        if self.vertices is None:
+            self.generate_mesh()
+        
+        mesh = self.get_trimesh()
+        
+        mesh.export(filepath, file_type="stl_ascii")
+
+    def save_properties(self, filepath, append=True):
+        """Appends the internally computed self.properties to a text file."""
+        import json
+        
+        if not append:
+            filepath = self._get_versioned_path(filepath)
+        else:
+            self._make_parent_path(filepath)
+
+        # Ensure properties are computed
+        if not self.properties:
+            print('No properties computed yet!')
+            return
+            
+        # Prepend 'WorkspaceName' and 'self.name' to the headers and values respectively
+        keys = ['WorkspaceName'] + list(self.properties.keys())
+        values = [self.name] + list(self.properties.values())
+        
+        header = '\t'.join(keys) + '\n'
+        line = '\t'.join([str(v) if not isinstance(v, (list, np.ndarray)) 
+                          else json.dumps(v) for v in values]) + '\n'   
+        with open(filepath, "a+") as f:
+            f.seek(0)
+            if "WorkspaceName" not in f.read():
+                f.write(header)
+            f.write(line)
+        print(f'Saving properties to {filepath}')
+
+    def _get_versioned_path(self, filepath):
+        """
+        Ensures the directory exists and returns a versioned filename 
+        if the file already exists.
+        """
+        path = self._make_parent_path(filepath)
+        
+        # 2. Handle file versioning if it exists
+        if path.exists():
+            base = path.stem
+            ext = path.suffix
+            directory = path.parent
+            
+            # Look for existing copies and increment
+            counter = 1
+            new_path = directory / f"{base}_copy{counter}{ext}"
+            while new_path.exists():
+                counter += 1
+                new_path = directory / f"{base}_copy{counter}{ext}"
+            
+            return str(new_path)
+        
+        return str(path)
+    
+    def _make_parent_path(self, filepath):
+        """
+        Ensures the directory exists and returns path
+        """
+        path = Path(filepath)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        return path
+
+    # =========================================================================
     # Visualization MODULES
     # =========================================================================
     def visualize_matrix_cutoff(self, vmin, vmax, cmap="viridis"):
@@ -444,3 +579,43 @@ class Workspace:
         
         # Launch the GUI window
         plotter.show()
+
+    def visualize_matrix_cutoff_plt(self, vmin, vmax, downsample_factor=1):
+        """
+        Visualizes the 3D matrix using Matplotlib (bypassing OpenGL requirements).
+        
+        :param vmin: Minimum cutoff value to display.
+        :param vmax: Maximum cutoff value to display.
+        :param downsample_factor: Increase this integer (e.g., 2, 3) to speed up rendering for huge matrices.
+        """
+        import matplotlib.pyplot as plt
+        
+        # 1. Downsample the matrix if requested (takes every Nth voxel)
+        if downsample_factor > 1:
+            mat = self.matrix[::downsample_factor, ::downsample_factor, ::downsample_factor]
+            print(f"Downsampled matrix for visualization from {self.matrix.shape} to {mat.shape}")
+        else:
+            mat = self.matrix
+            
+        # 2. Create a boolean mask of voxels that fall within the cutoff range
+        voxel_mask = (mat >= vmin) & (mat <= vmax)
+        
+        if not np.any(voxel_mask):
+            print(f"No voxels found in the range [{vmin}, {vmax}] for workspace '{self.name}'.")
+            return
+            
+        # 3. Render using Matplotlib 3D
+        fig = plt.figure(figsize=(10, 10))
+        ax = fig.add_subplot(111, projection='3d')
+        
+        # Plot using one of our stylish colors from earlier!
+        # (edgecolor makes the individual cubes visible, alpha makes them slightly transparent)
+        ax.voxels(voxel_mask, facecolors='#118AB2', edgecolor='black', alpha=0.6)
+        
+        physical_aspect = np.array(mat.shape) * self.voxel_size
+        ax.set_box_aspect(physical_aspect)
+
+        ax.set_title(f"Workspace: {self.name} | Cutoff: {vmin} - {vmax}")
+        
+        # This will perfectly pipe to your VS Code Interactive Window!
+        plt.show()
