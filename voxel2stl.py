@@ -363,7 +363,7 @@ def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savin
     if savingOptions['property_options']['min_max']:
         min_extents = np.min(vertices, axis=0)
         max_extents = np.max(vertices, axis=0)
-        propertyList.extend([min_extents, max_extents])
+        propertyList.extend(list(min_extents) + list(max_extents))
         propertyNames.extend(["MinExtentsX", "MinExtentsY", "MinExtentsZ",
                               "MaxExtentsX", "MaxExtentsY", "MaxExtentsZ"])
 

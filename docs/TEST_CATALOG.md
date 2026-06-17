@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-29 passed
+35 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -91,6 +91,39 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: `solid_primary_24.tif`
 - Checks: four requested random subvolumes produce four TIFF outputs.
 - Pass tolerance: exactly `4` TIFF files.
+
+`test_serial_pipeline_writes_complete_property_schema_for_fiber_fixture`
+- Input: `fiber_angle_48.tif`
+- Checks: a full property-table run writes every selected property column with one value per header entry.
+- Pass tolerance: exact expected schema, one row, row length equals header length, positive fiber diameter, nonnegative fiber-diameter standard deviation, and porosity `< 1.0`.
+
+`test_multi_primary_random_sampling_distributes_outputs_across_input_volumes`
+- Inputs: `small_primary_0.tif`, `small_primary_1.tif`, `small_primary_2.tif`
+- Checks: random sampling can distribute requested samples across multiple primary volumes.
+- Pass tolerance: exactly `6` TIFF files and exactly `2` outputs for each primary volume.
+
+`test_large_random_sampling_uses_local_parallel_dispatch`
+- Input: `solid_primary_24.tif`
+- Checks: the local multiprocessing dispatch path is used for large random-sampling jobs.
+- Pass tolerance: exactly `1001` submitted local-parallel tasks and each task receives the expected surface settings.
+
+## Mesh Cleanup And Outputs
+
+`test_laplacian_smoothing_preserves_mesh_shape_and_marks_output_name`
+- Input: `cube_16.tif`
+- Checks: Laplacian smoothing runs on a known cube mesh, marks the output name, preserves array shapes, keeps finite vertices, and returns a valid volume mesh.
+- Pass tolerance: name suffix `_laplacian2`, unchanged vertex and face array shapes, all finite vertices, and `checkMesh()` true.
+
+`test_remove_floating_islands_keeps_largest_component`
+- Input: `two_islands_24.tif`
+- Checks: optional island removal deletes disconnected small components and keeps one largest component.
+- Pass tolerance: original mesh has more than one component, cleaned mesh has exactly one component, and cleaned face count is lower than original face count.
+- Note: this test requires PyMeshLab and is skipped if PyMeshLab is unavailable.
+
+`test_centerline_analysis_writes_direction_map_with_expected_columns`
+- Input: `fiber_angle_48.tif`
+- Checks: centerline analysis writes a voxel direction map with coordinate and vector columns.
+- Pass tolerance: output file exists, has exactly `6` columns, has one row per material voxel, and all values are finite.
 
 ## Properties
 

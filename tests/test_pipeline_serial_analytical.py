@@ -56,3 +56,122 @@ def test_random_sampling_small_jobs_write_requested_output_count(tmp_output, fix
     v2s.voxel2stl("Regular", crop, base_surface_settings(), saving)
 
     assert len(list((tmp_output / "tiff").glob("*.tif"))) == 4
+
+
+def test_serial_pipeline_writes_complete_property_schema_for_fiber_fixture(tmp_output, fixture_dir):
+    v2s = pytest.importorskip("voxel2stl")
+
+    saving = base_saving_options(
+        tmp_output,
+        property_save=True,
+        property_options={
+            "min_max": True,
+            "surf_area": True,
+            "closed_volume": True,
+            "vol_by_area": True,
+            "porosity": True,
+            "fiber_diameter": True,
+            "fiber_diam_sphere": 6,
+            "pore_distribution": True,
+            "pore_dist_sphere": 6,
+            "FiberAngle": True,
+            "FiberAnglePlane": "XY",
+            "FiberLength": True,
+        },
+    )
+    crop = ([str(fixture_dir / "fiber_angle_48.tif")], [1.0], 0, 0)
+
+    v2s.voxel2stl("Regular", crop, base_surface_settings(), saving)
+
+    header, rows = read_property_table(tmp_output / "properties.txt")
+    expected_columns = [
+        "StlName",
+        "MinExtentsX",
+        "MinExtentsY",
+        "MinExtentsZ",
+        "MaxExtentsX",
+        "MaxExtentsY",
+        "MaxExtentsZ",
+        "SurfaceArea",
+        "ClosedVolume",
+        "Volume/SurfaceArea",
+        "Porosity",
+        "fiber_diameter_Mean",
+        "fiber_diameter_Std",
+        "meanPore",
+        "stdPore",
+        "poreDistribution",
+        "ReferencePlane",
+        "MeanAzimuthAngle",
+        "StDAzimuthAngle",
+        "MeanElevationAngle",
+        "StDElevationAngle",
+        "MeanLength",
+        "StDLength",
+    ]
+
+    assert header == expected_columns
+    assert len(rows) == 1
+    assert len(rows[0]) == len(header)
+    assert float(rows[0][header.index("fiber_diameter_Mean")]) > 0.0
+    assert float(rows[0][header.index("fiber_diameter_Std")]) >= 0.0
+    assert float(rows[0][header.index("Porosity")]) < 1.0
+
+
+def test_multi_primary_random_sampling_distributes_outputs_across_input_volumes(
+    monkeypatch, tmp_output, fixture_dir
+):
+    v2s = pytest.importorskip("voxel2stl")
+
+    filenames = [str(fixture_dir / f"small_primary_{idx}.tif") for idx in range(3)]
+    sequence = iter(filenames * 2)
+    monkeypatch.setattr(v2s.random, "choice", lambda values: next(sequence))
+    monkeypatch.setattr(v2s.random, "randint", lambda lower, upper: 4)
+
+    saving = base_saving_options(tmp_output, tiff_save=True)
+    crop = (filenames, [1.0, 1.0, 1.0], 6, 12)
+
+    v2s.voxel2stl("Regular", crop, base_surface_settings(), saving)
+
+    outputs = sorted(path.name for path in (tmp_output / "tiff").glob("*.tif"))
+    assert len(outputs) == 6
+    for idx in range(3):
+        assert sum(name.startswith(f"small_primary_{idx}") for name in outputs) == 2
+
+
+def test_large_random_sampling_uses_local_parallel_dispatch(monkeypatch, tmp_output, fixture_dir):
+    v2s = pytest.importorskip("voxel2stl")
+
+    submitted = []
+
+    class FakeFuture:
+        def __init__(self, result):
+            self._result = result
+
+        def result(self):
+            return self._result
+
+    class FakeExecutor:
+        def __init__(self, max_workers):
+            self.max_workers = max_workers
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def submit(self, fn, args):
+            submitted.append(args)
+            return FakeFuture(f"processed {len(submitted)}")
+
+    monkeypatch.setattr(v2s, "ProcessPoolExecutor", FakeExecutor)
+    monkeypatch.setattr(v2s, "as_completed", lambda futures: futures)
+
+    saving = base_saving_options(tmp_output, tiff_save=True)
+    crop = ([str(fixture_dir / "solid_primary_24.tif")], [1.0], 1001, 12)
+
+    v2s.voxel2stl("Regular", crop, base_surface_settings(), saving)
+
+    assert len(submitted) == 1001
+    assert all(args[-2] == base_surface_settings() for args in submitted)
