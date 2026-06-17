@@ -16,8 +16,6 @@ def test_mpi_environment_is_discoverable():
     pytest.importorskip("mpi4py")
 
 
-@pytest.mark.current_gap
-@pytest.mark.xfail(reason="Current voxel2stl_mpi.py is a script with hard-coded inputs, not a tiny-fixture CLI.")
 def test_mpi_tiny_fixture_matches_serial_contract(repo_root, fixture_dir, tmp_path):
     pytest.importorskip("mpi4py")
     if shutil.which("mpirun") is None:
@@ -46,3 +44,5 @@ def test_mpi_tiny_fixture_matches_serial_contract(repo_root, fixture_dir, tmp_pa
 
     assert result.returncode == 0, result.stderr + result.stdout
     assert "Completed 1 volumes" in result.stdout
+    assert len(list((tmp_path / "stl").glob("*.stl"))) == 1
+    assert (tmp_path / "properties.txt").exists()
