@@ -6,6 +6,7 @@ from pathlib import Path
 
 import imageio
 import numpy as np
+import tifffile as tiff
 
 
 def load_volume(path: str | Path) -> np.ndarray:
@@ -49,3 +50,10 @@ def write_chen_format(path: str | Path, binary_volume: np.ndarray, voxel_size: f
                     if external_volume[i, j, k] == 1:
                         value = int(external_volume[i, j, k])
                         file_obj.write(f"\n{i + 1} {j + 1} {k + 1} {value}")
+
+
+def write_tiff_volume(path: str | Path, volume: np.ndarray) -> None:
+    """Write a 3D TIFF volume using the current HERMES orientation convention."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tiff.imwrite(path, np.transpose(volume, (2, 1, 0)).astype(volume.dtype), imagej=True)

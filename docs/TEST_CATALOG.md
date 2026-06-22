@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-44 passed
+45 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -140,6 +140,11 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: JSON config file that generates `config_cube.tif`
 - Checks: the exact `python -m hermes run CONFIG.json` entry point runs the shared config workflow.
 - Pass tolerance: return code `0`, stdout contains `config_cube`, STL file exists with nonzero size, DAT file exists, and property table exists.
+
+`test_config_runner_explicit_crop_preserves_known_tiff_content`
+- Input: JSON config file that generates a larger binary cube volume and crops the exact material cube.
+- Checks: config-driven explicit-corner cropping preserves TIFF and DAT content and computes near-zero porosity for the all-material crop.
+- Pass tolerance: TIFF shape exactly `(8, 8, 8)`, TIFF material count exactly `512`, DAT shape exactly `(10, 10, 10)`, DAT material count exactly `512`, closed volume `512 +/- 80`, and porosity `0.0 +/- 0.03`.
 
 ## Mesh Cleanup And Outputs
 

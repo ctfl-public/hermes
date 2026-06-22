@@ -9,6 +9,7 @@ import json
 import numpy as np
 import tifffile as tiff
 
+from hermes.io import write_tiff_volume
 from hermes.workspace import Workspace
 
 
@@ -25,6 +26,7 @@ def run_volume_pipeline(
     outputs: Iterable[str] = DEFAULT_OUTPUTS,
     properties: Iterable[str] = DEFAULT_PROPERTIES,
     pad: bool = True,
+    crop: dict[str, object] | None = None,
 ) -> dict[str, object]:
     """Run a compact volume-to-properties workflow without editing source files."""
     input_path = Path(input_path)
@@ -35,8 +37,13 @@ def run_volume_pipeline(
     property_set = set(properties)
 
     workspace = Workspace.from_file(input_path, voxel_size=voxel_size)
-    workspace.name = name or input_path.stem
     workspace.matrix = (workspace.matrix > 0).astype(np.uint8)
+    if crop is not None:
+        workspace = workspace.extract_subvolume(
+            corner=tuple(int(value) for value in crop.get("corner", [0, 0, 0])),
+            dimensions=tuple(int(value) for value in crop["size"]),
+        )
+    workspace.name = name or workspace.name
 
     if pad:
         workspace.pad()
@@ -61,6 +68,10 @@ def run_volume_pipeline(
         dat_path = output_dir / "voxels" / f"{workspace.name}.dat"
         workspace.save_voxel_data(dat_path)
         written["dat"] = str(dat_path)
+    if "tiff" in output_set:
+        tiff_path = output_dir / "tiff" / f"{workspace.name}.tif"
+        write_tiff_volume(tiff_path, workspace._unpadded_matrix().astype(np.uint8))
+        written["tiff"] = str(tiff_path)
     if "properties" in output_set:
         properties_path = output_dir / "properties.txt"
         workspace.save_properties(properties_path, append=False)
@@ -97,6 +108,7 @@ def run_pipeline_config(config_path: str | Path) -> dict[str, object]:
         outputs=config.get("outputs", DEFAULT_OUTPUTS),
         properties=config.get("properties", DEFAULT_PROPERTIES),
         pad=bool(config.get("pad", True)),
+        crop=config.get("crop"),
     )
 
 
