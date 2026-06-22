@@ -81,6 +81,12 @@ python -m hermes quickstart --output hermes-quickstart-output
 This command generates a tiny synthetic 3D cube, builds a surface mesh, writes voxel and property outputs, and prints a JSON summary.
 See [docs/quickstart.md](docs/quickstart.md) for the expected files and what the example verifies.
 
+To run the same style of workflow from an editable config file, use:
+
+```bash
+python -m hermes run examples/quickstart/config.json
+```
+
 ### GUI Workflow
 
 Launch the GUI from the repository root.

@@ -3,6 +3,7 @@
 HERMES currently provides three main entry points.
 
 - `python -m hermes quickstart` runs a tiny no-edit workflow for installation checks and first-time use.
+- `python -m hermes run CONFIG.json` runs a workflow from a JSON config file.
 - `HERMES.py` runs the GUI workflow.
 - `voxel2stl.py` runs the serial script workflow.
 - `voxel2stl_mpi.py` runs the MPI workflow.
@@ -22,6 +23,18 @@ python -m hermes quickstart --output hermes-quickstart-output
 ```
 
 See [quickstart.md](quickstart.md) for the output files and expected checks.
+
+## Config Workflow
+
+Run a workflow from a JSON config file.
+
+```bash
+python -m hermes run examples/quickstart/config.json
+```
+
+The example config generates a tiny binary cube, writes outputs to `examples/quickstart/output`, and computes surface area, closed volume, volume-to-area ratio, and porosity.
+This is the first stable command shape for the unified framework.
+Future GUI, serial, and MPI cleanup should converge on this config model.
 
 ## GUI Workflow
 

@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-42 passed
+44 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -128,6 +128,18 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: generated `quickstart_cube.tif`
 - Checks: the exact `python -m hermes quickstart` entry point runs successfully and writes the expected quick-start outputs.
 - Pass tolerance: return code `0`, stdout contains `quickstart_cube`, input TIFF exists, STL file exists with nonzero size, DAT file exists, and property table exists.
+
+## Config Runner
+
+`test_run_pipeline_config_writes_known_cube_outputs`
+- Input: generated `config_cube.tif` from a JSON config file
+- Checks: the shared config runner writes input TIFF, STL, sparse DAT, and property-table outputs.
+- Pass tolerance: closed volume `512 +/- 80`, porosity `1 - 512 / 16^3 +/- 0.03`, STL file exists with nonzero size, DAT reloads to shape `(18, 18, 18)`, and DAT material count exactly `512`.
+
+`test_python_module_run_entrypoint_uses_json_config`
+- Input: JSON config file that generates `config_cube.tif`
+- Checks: the exact `python -m hermes run CONFIG.json` entry point runs the shared config workflow.
+- Pass tolerance: return code `0`, stdout contains `config_cube`, STL file exists with nonzero size, DAT file exists, and property table exists.
 
 ## Mesh Cleanup And Outputs
 

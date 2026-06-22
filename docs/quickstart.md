@@ -18,11 +18,13 @@ python -m hermes quickstart --output hermes-quickstart-output
 ```
 
 The command prints a JSON summary of the generated input, output files, and computed properties.
+It also writes `hermes-quickstart-output/quickstart.json`, which is the config file used for the run.
 
 ## Outputs
 
 The quick-start command writes:
 
+- `hermes-quickstart-output/quickstart.json`
 - `hermes-quickstart-output/input/quickstart_cube.tif`
 - `hermes-quickstart-output/stl/quickstart_cube.stl`
 - `hermes-quickstart-output/voxels/quickstart_cube.dat`
@@ -39,4 +41,10 @@ It is intentionally small so it can run quickly on a laptop.
 ## Current Scope
 
 The quick-start is the first unified command-line workflow.
+The same backend can be called directly with a JSON config file.
+
+```bash
+python -m hermes run examples/quickstart/config.json
+```
+
 The GUI, legacy serial script, and MPI script are still available, but they have not yet all been consolidated around this interface.

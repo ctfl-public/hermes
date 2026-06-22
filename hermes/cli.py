@@ -6,10 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-import numpy as np
-import tifffile as tiff
-
-from hermes.pipeline import run_volume_pipeline
+from hermes.pipeline import run_pipeline_config
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,9 +24,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     quickstart.add_argument("--voxel-size", type=float, default=1.0, help="Voxel size for the synthetic volume.")
 
+    run = subparsers.add_parser("run", help="Run a HERMES workflow from a JSON config file.")
+    run.add_argument("config", help="Path to a HERMES JSON config file.")
+
     args = parser.parse_args(argv)
     if args.command == "quickstart":
         return run_quickstart(args.output, args.voxel_size)
+    if args.command == "run":
+        result = run_pipeline_config(args.config)
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0
 
     parser.error(f"Unknown command: {args.command}")
     return 2
@@ -37,22 +41,28 @@ def main(argv: list[str] | None = None) -> int:
 
 def run_quickstart(output: str | Path, voxel_size: float = 1.0) -> int:
     output = Path(output)
-    input_dir = output / "input"
-    input_dir.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True, exist_ok=True)
+    config_path = output / "quickstart.json"
+    config = {
+        "name": "quickstart_cube",
+        "input": {
+            "path": "input/quickstart_cube.tif",
+            "voxel_size": voxel_size,
+            "generate": {
+                "kind": "binary_cube",
+                "shape": [16, 16, 16],
+                "bounds": [[4, 12], [4, 12], [4, 12]],
+            },
+        },
+        "output_dir": ".",
+        "outputs": ["stl", "dat", "properties"],
+        "properties": ["surface_area", "closed_volume", "volume_by_area", "porosity"],
+    }
+    with config_path.open("w", encoding="utf-8") as file_obj:
+        json.dump(config, file_obj, indent=2)
+        file_obj.write("\n")
 
-    input_path = input_dir / "quickstart_cube.tif"
-    volume = np.zeros((16, 16, 16), dtype=np.uint8)
-    volume[4:12, 4:12, 4:12] = 1
-    tiff.imwrite(input_path, volume, imagej=True)
-
-    result = run_volume_pipeline(
-        input_path,
-        voxel_size,
-        output,
-        name="quickstart_cube",
-        outputs=("stl", "dat", "properties"),
-        properties=("surface_area", "closed_volume", "volume_by_area", "porosity"),
-    )
+    result = run_pipeline_config(config_path)
 
     print(json.dumps(result, indent=2, sort_keys=True))
     return 0

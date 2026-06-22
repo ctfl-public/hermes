@@ -5,7 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Iterable
 
+import json
 import numpy as np
+import tifffile as tiff
 
 from hermes.workspace import Workspace
 
@@ -71,3 +73,54 @@ def run_volume_pipeline(
         "properties": dict(workspace.properties),
         "written": written,
     }
+
+
+def run_pipeline_config(config_path: str | Path) -> dict[str, object]:
+    """Run a HERMES workflow from a JSON config file."""
+    config_path = Path(config_path)
+    with config_path.open("r", encoding="utf-8") as file_obj:
+        config = json.load(file_obj)
+
+    base_dir = config_path.parent
+    input_config = config["input"]
+    input_path = _resolve_path(input_config["path"], base_dir)
+    output_dir = _resolve_path(config["output_dir"], base_dir)
+
+    if "generate" in input_config:
+        _write_generated_volume(input_path, input_config["generate"])
+
+    return run_volume_pipeline(
+        input_path,
+        float(input_config.get("voxel_size", 1.0)),
+        output_dir,
+        name=config.get("name"),
+        outputs=config.get("outputs", DEFAULT_OUTPUTS),
+        properties=config.get("properties", DEFAULT_PROPERTIES),
+        pad=bool(config.get("pad", True)),
+    )
+
+
+def _resolve_path(path: str | Path, base_dir: Path) -> Path:
+    path = Path(path)
+    if path.is_absolute():
+        return path
+    return base_dir / path
+
+
+def _write_generated_volume(path: Path, generate_config: dict[str, object]) -> None:
+    kind = generate_config.get("kind")
+    if kind != "binary_cube":
+        raise ValueError(f"Unsupported generated volume kind: {kind}")
+
+    shape = tuple(int(value) for value in generate_config.get("shape", [16, 16, 16]))
+    bounds = generate_config.get("bounds", [[4, 12], [4, 12], [4, 12]])
+    volume = np.zeros(shape, dtype=np.uint8)
+    x_bounds, y_bounds, z_bounds = bounds
+    volume[
+        int(x_bounds[0]) : int(x_bounds[1]),
+        int(y_bounds[0]) : int(y_bounds[1]),
+        int(z_bounds[0]) : int(z_bounds[1]),
+    ] = 1
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tiff.imwrite(path, volume, imagej=True)
