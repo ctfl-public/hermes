@@ -2,6 +2,7 @@
 
 HERMES currently provides three main entry points.
 
+- `python -m hermes quickstart` runs a tiny no-edit workflow for installation checks and first-time use.
 - `HERMES.py` runs the GUI workflow.
 - `voxel2stl.py` runs the serial script workflow.
 - `voxel2stl_mpi.py` runs the MPI workflow.
@@ -11,6 +12,16 @@ Activate the environment before using any workflow.
 ```bash
 conda activate hermes
 ```
+
+## Quick-Start Workflow
+
+Run the quick-start command to generate a synthetic input volume and write HERMES outputs without editing source files.
+
+```bash
+python -m hermes quickstart --output hermes-quickstart-output
+```
+
+See [quickstart.md](quickstart.md) for the output files and expected checks.
 
 ## GUI Workflow
 

@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-40 passed
+42 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -116,6 +116,18 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: `solid_primary_24.tif`
 - Checks: the local multiprocessing dispatch path is used for large random-sampling jobs.
 - Pass tolerance: exactly `1001` submitted local-parallel tasks and each task receives the expected surface settings.
+
+## Quick Start CLI
+
+`test_quickstart_cli_writes_known_cube_outputs`
+- Input: generated `quickstart_cube.tif`
+- Checks: the no-edit quick-start command writes input TIFF, STL, sparse DAT, and property-table outputs.
+- Pass tolerance: STL file exists with nonzero size, DAT reloads to shape `(18, 18, 18)` with material count exactly `512`, property header exactly `WorkspaceName`, `surface_area`, `closed_volume`, `volume_by_area`, and `porosity`, closed volume `512 +/- 80`, and porosity `1 - 512 / 16^3 +/- 0.03`.
+
+`test_python_module_quickstart_entrypoint_runs`
+- Input: generated `quickstart_cube.tif`
+- Checks: the exact `python -m hermes quickstart` entry point runs successfully and writes the expected quick-start outputs.
+- Pass tolerance: return code `0`, stdout contains `quickstart_cube`, input TIFF exists, STL file exists with nonzero size, DAT file exists, and property table exists.
 
 ## Mesh Cleanup And Outputs
 

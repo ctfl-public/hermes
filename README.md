@@ -72,6 +72,15 @@ See [docs/installation.md](docs/installation.md) for platform notes and troubles
 
 ## Quick Start
 
+Run the no-edit quick-start workflow from the repository root.
+
+```bash
+python -m hermes quickstart --output hermes-quickstart-output
+```
+
+This command generates a tiny synthetic 3D cube, builds a surface mesh, writes voxel and property outputs, and prints a JSON summary.
+See [docs/quickstart.md](docs/quickstart.md) for the expected files and what the example verifies.
+
 ### GUI Workflow
 
 Launch the GUI from the repository root.
@@ -169,6 +178,7 @@ See [docs/testing.md](docs/testing.md) and [docs/TEST_CATALOG.md](docs/TEST_CATA
 
 - [Feature overview](docs/features.md)
 - [Installation](docs/installation.md)
+- [Quick start](docs/quickstart.md)
 - [Usage](docs/usage.md)
 - [MPI and HPC usage](docs/mpi.md)
 - [Examples](docs/examples.md)

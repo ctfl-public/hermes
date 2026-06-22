@@ -188,7 +188,7 @@ class Workspace:
 
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        mode = "a+" if append else "w"
+        mode = "a+" if append else "w+"
         keys = ["WorkspaceName"] + list(self.properties.keys())
         values = [self.name] + list(self.properties.values())
 
