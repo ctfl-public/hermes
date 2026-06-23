@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-63 passed
+65 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -48,10 +48,15 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Checks: GUI imports and required widgets/buttons exist.
 - Pass tolerance: all listed widget names must be found.
 
-`test_gui_run_pipeline_builds_expected_serial_call`
+`test_gui_run_pipeline_builds_expected_workflow_config`
 - Inputs: `HERMESGUI.ui`, `cube_16.tif`
-- Checks: the GUI can assemble a serial pipeline call from table entries, sampling controls, save controls, smoothing controls, and property controls.
-- Pass tolerance: crop mode exactly `Regular`, input filename and voxel size preserved exactly, volume length exactly `8`, requested volume count exactly `0`, TIFF saving enabled, Laplacian smoothing enabled with `2` iterations, and surface-area output enabled.
+- Checks: the GUI Run button builds and launches a framework workflow config from table entries, sampling controls, save controls, smoothing controls, and property controls.
+- Pass tolerance: input path and voxel size preserved exactly, sampling config exactly `{"mode": "grid", "volume_length": 8}`, outputs exactly `["tiff"]`, properties exactly `["surface_area"]`, and Laplacian smoothing enabled with `2` iterations.
+
+`test_gui_run_pipeline_falls_back_to_serial_for_multi_input`
+- Inputs: `HERMESGUI.ui`, `small_primary_0.tif`, and `small_primary_1.tif`
+- Checks: GUI Run falls back to the serial backend for multi-input workflows that the shared config runner does not yet represent.
+- Pass tolerance: crop mode exactly `Regular`, both input filenames and voxel sizes preserved exactly, requested volume count exactly `2`, and volume length exactly `12`.
 
 `test_gui_adapter_builds_regular_serial_arguments`
 - Input: `cube_16.tif` plus representative GUI field values
@@ -183,6 +188,11 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: JSON config selecting min/max extents, fiber diameter, and pore distribution
 - Checks: config-driven workflow computes advanced GUI property selections through the shared framework.
 - Pass tolerance: result contains `min_extents`, `max_extents`, `fiber_diameter_mean`, and `pore_size_mean`, and a property table is written.
+
+`test_config_runner_applies_gui_surface_settings`
+- Input: JSON config selecting Laplacian smoothing with `2` iterations
+- Checks: config-driven workflow applies GUI-style surface settings through the shared framework.
+- Pass tolerance: result name exactly `smooth_cube_laplacian2` and matching STL output exists.
 
 `test_sampling_helpers_make_deterministic_grid_and_seeded_random_specs`
 - Input: synthetic `(24, 24, 24)` volume dimensions.

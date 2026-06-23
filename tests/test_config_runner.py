@@ -208,3 +208,35 @@ def test_config_runner_computes_advanced_gui_properties(tmp_path):
     assert "fiber_diameter_mean" in result["properties"]
     assert "pore_size_mean" in result["properties"]
     assert (tmp_path / "advanced_output" / "properties.txt").exists()
+
+
+def test_config_runner_applies_gui_surface_settings(tmp_path):
+    config_path = tmp_path / "smooth_config.json"
+    config = {
+        "name": "smooth_cube",
+        "input": {
+            "path": "input/smooth_cube.tif",
+            "voxel_size": 1.0,
+            "generate": {
+                "kind": "binary_cube",
+                "shape": [16, 16, 16],
+                "bounds": [[4, 12], [4, 12], [4, 12]],
+            },
+        },
+        "output_dir": "smooth_output",
+        "outputs": ["stl"],
+        "properties": [],
+        "surface_settings": {
+            "laplacianFlag": True,
+            "laplacian_iter": 2,
+            "ScreenedPoissonFlag": False,
+            "ScreenedPoisson_iter": None,
+            "RemoveIslandsFlag": False,
+        },
+    }
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+    result = run_config(config_path)
+
+    assert result["name"] == "smooth_cube_laplacian2"
+    assert (tmp_path / "smooth_output" / "stl" / "smooth_cube_laplacian2.stl").exists()

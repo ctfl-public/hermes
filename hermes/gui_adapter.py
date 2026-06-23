@@ -48,6 +48,7 @@ def build_workflow_config(state: dict) -> dict:
         "outputs": _config_outputs(saving_options),
         "properties": _config_properties(saving_options["property_options"]),
         "property_options": _config_property_options(saving_options["property_options"]),
+        "surface_settings": _surface_settings(state),
     }
 
     sampling = _config_sampling(state, filevoxels[0])

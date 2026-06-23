@@ -32,6 +32,7 @@ from pyvistaqt import BackgroundPlotter, QtInteractor
 from hermes.gui_adapter import GuiAdapterError, build_serial_run_arguments, build_workflow_config
 from hermes.serial import run_serial
 from hermes.segmentation import segment_greyscale
+from hermes.workflow import run_workflow_config
 
 class VoxelRenderingWindow(QDialog):
     def __init__(self, voxel_data, VoxelSizeX, VoxelSizeY, VoxelSizeZ, parent=None):
@@ -1047,21 +1048,31 @@ class UI(QMainWindow):
             self.zmax_input.setText('%i'%self.image_data.shape[0])
     
     def run_voxel2stl(self):
+        state = self._serial_run_state()
         try:
-            croppingFlag, cropSettings, surfaceSettings, savingOptions = build_serial_run_arguments(self._serial_run_state())
+            workflow_config = build_workflow_config(state)
         except GuiAdapterError as exc:
-            self.show_error_message("Error", str(exc))
+            try:
+                croppingFlag, cropSettings, surfaceSettings, savingOptions = build_serial_run_arguments(state)
+            except GuiAdapterError:
+                self.show_error_message("Error", str(exc))
+                return
+
+            print(surfaceSettings)
+            print(croppingFlag)
+            print(savingOptions)
+            print(cropSettings)
+
+            # Close the UI window
+            self.close()
+            run_serial(croppingFlag, cropSettings, surfaceSettings, savingOptions)
             return
 
-        print(surfaceSettings)
-        print(croppingFlag)
-        print(savingOptions)
-        print(cropSettings)
+        print(workflow_config)
 
         # Close the UI window
         self.close()
-        
-        run_serial(croppingFlag, cropSettings, surfaceSettings, savingOptions)
+        run_workflow_config(workflow_config)
 
     def _serial_run_state(self):
         input_rows = []

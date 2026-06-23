@@ -10,6 +10,7 @@ import numpy as np
 import tifffile as tiff
 
 from hermes.io import write_tiff_volume
+from hermes.mesh import repair_mesh, smooth_mesh
 from hermes.sampling import specs_from_config
 from hermes.workspace import Workspace
 
@@ -27,6 +28,7 @@ def run_volume(
     outputs: Iterable[str] = DEFAULT_OUTPUTS,
     properties: Iterable[str] = DEFAULT_PROPERTIES,
     property_options: dict[str, object] | None = None,
+    surface_settings: dict[str, object] | None = None,
     pad: bool = True,
     crop: dict[str, object] | None = None,
 ) -> dict[str, object]:
@@ -50,6 +52,7 @@ def run_volume(
         outputs=outputs,
         properties=properties,
         property_options=property_options,
+        surface_settings=surface_settings,
         pad=pad,
         append_properties=False,
     )
@@ -62,6 +65,7 @@ def run_workspace(
     outputs: Iterable[str] = DEFAULT_OUTPUTS,
     properties: Iterable[str] = DEFAULT_PROPERTIES,
     property_options: dict[str, object] | None = None,
+    surface_settings: dict[str, object] | None = None,
     pad: bool = True,
     append_properties: bool = False,
 ) -> dict[str, object]:
@@ -71,11 +75,25 @@ def run_workspace(
     output_set = set(outputs)
     property_set = set(properties)
     property_options = property_options or {}
+    surface_settings = surface_settings or _default_surface_settings()
 
     if pad:
         workspace.pad()
 
     workspace.generate_mesh()
+    if _uses_surface_processing(surface_settings):
+        workspace.name, workspace.vertices, workspace.faces = smooth_mesh(
+            workspace.name,
+            workspace.vertices,
+            workspace.faces,
+            surface_settings,
+        )
+    if not workspace.check_mesh():
+        workspace.name, workspace.vertices, workspace.faces = repair_mesh(
+            workspace.name,
+            workspace.vertices,
+            workspace.faces,
+        )
 
     if "surface_area" in property_set:
         workspace.compute_surface_area()
@@ -129,7 +147,12 @@ def run_config(config_path: str | Path) -> dict[str, object]:
         config = json.load(file_obj)
     config = _unwrap_workflow_config(config)
 
-    base_dir = config_path.parent
+    return run_workflow_config(config, base_dir=config_path.parent)
+
+
+def run_workflow_config(config: dict[str, object], *, base_dir: str | Path = ".") -> dict[str, object]:
+    """Run a HERMES workflow from an in-memory config dictionary."""
+    base_dir = Path(base_dir)
     input_config = config["input"]
     input_path = _resolve_path(input_config["path"], base_dir)
     output_dir = _resolve_path(config["output_dir"], base_dir)
@@ -157,6 +180,7 @@ def run_config(config_path: str | Path) -> dict[str, object]:
                     outputs=config.get("outputs", DEFAULT_OUTPUTS),
                     properties=config.get("properties", DEFAULT_PROPERTIES),
                     property_options=config.get("property_options"),
+                    surface_settings=config.get("surface_settings"),
                     pad=bool(config.get("pad", True)),
                     append_properties=index > 0,
                 )
@@ -171,6 +195,7 @@ def run_config(config_path: str | Path) -> dict[str, object]:
         outputs=config.get("outputs", DEFAULT_OUTPUTS),
         properties=config.get("properties", DEFAULT_PROPERTIES),
         property_options=config.get("property_options"),
+        surface_settings=config.get("surface_settings"),
         pad=bool(config.get("pad", True)),
         crop=config.get("crop"),
     )
@@ -181,6 +206,24 @@ def _unwrap_workflow_config(config: dict[str, object]) -> dict[str, object]:
     if "workflowConfig" in config:
         return config["workflowConfig"]
     return config
+
+
+def _default_surface_settings() -> dict[str, object]:
+    return {
+        "laplacianFlag": False,
+        "laplacian_iter": None,
+        "ScreenedPoissonFlag": False,
+        "ScreenedPoisson_iter": None,
+        "RemoveIslandsFlag": False,
+    }
+
+
+def _uses_surface_processing(surface_settings: dict[str, object]) -> bool:
+    return bool(
+        surface_settings.get("laplacianFlag")
+        or surface_settings.get("ScreenedPoissonFlag")
+        or surface_settings.get("RemoveIslandsFlag")
+    )
 
 
 def _resolve_path(path: str | Path, base_dir: Path) -> Path:

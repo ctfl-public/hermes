@@ -34,7 +34,7 @@ def test_gui_import_and_required_widgets_exist(qtbot=None):
         ui.close()
 
 
-def test_gui_run_pipeline_builds_expected_serial_call(monkeypatch, tmp_path, fixture_dir, qtbot=None):
+def test_gui_run_pipeline_builds_expected_workflow_config(monkeypatch, tmp_path, fixture_dir, qtbot=None):
     pytest.importorskip("PyQt5")
     pytest.importorskip("pyvista")
     pytest.importorskip("pyvistaqt")
@@ -44,13 +44,10 @@ def test_gui_run_pipeline_builds_expected_serial_call(monkeypatch, tmp_path, fix
 
     captured = {}
 
-    def fake_run_serial(cropping_flag, crop_settings, surface_settings, saving_options):
-        captured["cropping_flag"] = cropping_flag
-        captured["crop_settings"] = crop_settings
-        captured["surface_settings"] = surface_settings
-        captured["saving_options"] = saving_options
+    def fake_run_workflow_config(config):
+        captured["config"] = config
 
-    monkeypatch.setattr(HERMES, "run_serial", fake_run_serial)
+    monkeypatch.setattr(HERMES, "run_workflow_config", fake_run_workflow_config)
 
     app = QApplication.instance() or QApplication([])
     ui = UI()
@@ -69,16 +66,64 @@ def test_gui_run_pipeline_builds_expected_serial_call(monkeypatch, tmp_path, fix
 
         ui.run_voxel2stl()
 
+        assert captured["config"]["input"] == {
+            "path": str(fixture_dir / "cube_16.tif"),
+            "voxel_size": 1.0,
+        }
+        assert captured["config"]["sampling"] == {"mode": "grid", "volume_length": 8}
+        assert captured["config"]["outputs"] == ["tiff"]
+        assert captured["config"]["properties"] == ["surface_area"]
+        assert captured["config"]["surface_settings"]["laplacianFlag"] is True
+        assert captured["config"]["surface_settings"]["laplacian_iter"] == 2
+    finally:
+        ui.close()
+
+
+def test_gui_run_pipeline_falls_back_to_serial_for_multi_input(monkeypatch, tmp_path, fixture_dir, qtbot=None):
+    pytest.importorskip("PyQt5")
+    pytest.importorskip("pyvista")
+    pytest.importorskip("pyvistaqt")
+    from PyQt5.QtWidgets import QApplication, QTableWidgetItem
+    import HERMES
+    from HERMES import UI
+
+    captured = {}
+
+    def fake_run_serial(cropping_flag, crop_settings, surface_settings, saving_options):
+        captured["cropping_flag"] = cropping_flag
+        captured["crop_settings"] = crop_settings
+
+    def fail_run_workflow_config(config):
+        raise AssertionError("workflow config should not be used for multi-input GUI runs")
+
+    monkeypatch.setattr(HERMES, "run_serial", fake_run_serial)
+    monkeypatch.setattr(HERMES, "run_workflow_config", fail_run_workflow_config)
+
+    app = QApplication.instance() or QApplication([])
+    ui = UI()
+    try:
+        ui.tableWidget.setRowCount(2)
+        ui.tableWidget.setItem(0, 0, QTableWidgetItem(str(fixture_dir / "small_primary_0.tif")))
+        ui.tableWidget.setItem(0, 1, QTableWidgetItem("1.0"))
+        ui.tableWidget.setItem(1, 0, QTableWidgetItem(str(fixture_dir / "small_primary_1.tif")))
+        ui.tableWidget.setItem(1, 1, QTableWidgetItem("1.0"))
+        ui.tabWidget.setCurrentIndex(0)
+        ui.VolumnLengthlineEdit.setText("12")
+        ui.VolumnNumberlineEdit.setText("2")
+        ui.TiffSavecheckBox.setChecked(True)
+        ui.TiffSavePathtextEdit.setText(str(tmp_path / "tiff"))
+
+        ui.run_voxel2stl()
+
         assert captured["cropping_flag"] == "Regular"
         filenames, filevoxels, num_volumes, volume_length = captured["crop_settings"]
-        assert filenames == [str(fixture_dir / "cube_16.tif")]
-        assert filevoxels == [1.0]
-        assert num_volumes == 0
-        assert volume_length == 8
-        assert captured["surface_settings"]["laplacianFlag"] is True
-        assert captured["surface_settings"]["laplacian_iter"] == 2
-        assert captured["saving_options"]["tiff_save"] is True
-        assert captured["saving_options"]["property_options"]["surf_area"] is True
+        assert filenames == [
+            str(fixture_dir / "small_primary_0.tif"),
+            str(fixture_dir / "small_primary_1.tif"),
+        ]
+        assert filevoxels == [1.0, 1.0]
+        assert num_volumes == 2
+        assert volume_length == 12
     finally:
         ui.close()
 

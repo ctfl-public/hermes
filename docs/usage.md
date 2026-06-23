@@ -104,6 +104,8 @@ It supports previewing slices and histograms.
 It supports cropping segmented volumes.
 It supports rendering voxel masks.
 It supports saving segmented TIFFs.
+The Run button uses the shared workflow config path for supported single-input workflows.
+It falls back to the serial backend for workflows that are not yet represented by the config schema.
 For supported property workflows, `Save Settings` also stores a framework `workflowConfig` that can be rerun from the CLI.
 
 ## Segmentation Workflow

@@ -140,6 +140,13 @@ def test_gui_adapter_exports_regular_workflow_config(fixture_dir, tmp_path):
             "pore_dist_sphere": None,
             "fiber_angle_plane": "XY",
         },
+        "surface_settings": {
+            "laplacianFlag": True,
+            "laplacian_iter": 2,
+            "ScreenedPoissonFlag": False,
+            "ScreenedPoisson_iter": None,
+            "RemoveIslandsFlag": False,
+        },
         "sampling": {"mode": "grid", "volume_length": 8},
     }
 
