@@ -199,7 +199,6 @@ See [docs/testing.md](docs/testing.md) and [docs/TEST_CATALOG.md](docs/TEST_CATA
 - [Examples](docs/examples.md)
 - [Testing](docs/testing.md)
 - [Plain-language test catalog](docs/TEST_CATALOG.md)
-- [Legacy MPI notes](docs/legacy-mpi-notes.md)
 
 ## Citing HERMES
 

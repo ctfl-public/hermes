@@ -37,7 +37,7 @@ python -m pytest
 The expected characterization-test result for this draft is:
 
 ```text
-52 passed
+53 passed
 ```
 
 In sandboxed environments, the MPI test may need permission for `mpirun` to open local communication sockets.
@@ -63,15 +63,3 @@ If a cluster requires a specific MPI stack, rebuild the environment against that
 
 PyMeshLab is installed through `pip` in `environment.yml` because Conda availability can vary by platform.
 Most serial workflows can run without exercising PyMeshLab unless screened Poisson reconstruction is selected.
-
-## Legacy Environment Files
-
-The repository contains older environment snapshots.
-
-- `HERMES.yml`
-- `hermes_mpi.yml`
-- `mani_linux.yml`
-- `HERMESWINDOWS_Enviroment.yml`
-
-These files are retained for provenance.
-The intended public environment is `environment.yml`.
