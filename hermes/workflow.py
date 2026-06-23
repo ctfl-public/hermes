@@ -183,9 +183,3 @@ def _write_generated_volume(path: Path, generate_config: dict[str, object]) -> N
 
     path.parent.mkdir(parents=True, exist_ok=True)
     tiff.imwrite(path, volume, imagej=True)
-
-
-# Backward-compatible names for older internal imports.
-run_volume_pipeline = run_volume
-run_workspace_pipeline = run_workspace
-run_pipeline_config = run_config

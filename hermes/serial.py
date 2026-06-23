@@ -348,9 +348,3 @@ def _output_path(output_dir, temp_name, suffix):
     path = Path(output_dir) if output_dir != "" else Path(".")
     path.mkdir(parents=True, exist_ok=True)
     return path / (os.path.basename(temp_name) + suffix)
-
-
-# Backward-compatible names for the old wrapper layer.
-voxel2stl_legacy = run_serial
-process_single_volume_legacy = process_random_sample
-get_stl_legacy = process_sample
