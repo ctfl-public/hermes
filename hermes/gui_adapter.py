@@ -38,7 +38,7 @@ def build_workflow_config(state: dict) -> dict:
             for filename, voxel_size in zip(filenames, filevoxels)
         ]
 
-    sampling = _config_sampling(state, filevoxels[0])
+    sampling = _config_sampling(state, filevoxels[0], input_count=len(filenames))
     if sampling is not None:
         config["sampling"] = sampling
 
@@ -305,7 +305,7 @@ def _config_property_options(property_options):
     }
 
 
-def _config_sampling(state, voxel_size):
+def _config_sampling(state, voxel_size, *, input_count=1):
     cropping_flag = _cropping_flag(state.get("active_tab_index", 0))
     if cropping_flag == "Regular":
         volume_length = _required_int(state.get("regular_volume_length"), "Please enter both the volume length and the number of volumes.")
@@ -314,7 +314,10 @@ def _config_sampling(state, voxel_size):
             return None
         if num_volumes == 0:
             return {"mode": "grid", "volume_length": volume_length}
-        return {"mode": "random", "volume_length": volume_length, "count": num_volumes}
+        sampling = {"mode": "random", "volume_length": volume_length, "count": num_volumes}
+        if input_count > 1:
+            sampling["count_mode"] = "total"
+        return sampling
 
     if cropping_flag == "Corners":
         volume_length = _required_int(state.get("corner_volume_length"), "Please enter the volume length.")

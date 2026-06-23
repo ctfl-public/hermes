@@ -152,7 +152,7 @@ class Workspace:
         self.properties["pore_size_distribution"] = value[2]
         return value
 
-    def compute_centerline_orientation(self, plane: str = "XY"):
+    def compute_centerline_orientation(self, plane: str = "XY", direction_map_path=None):
         from hermes.centerlines import analyze_centerline
 
         azimuth_mean, elevation_mean, length_mean, azimuth_std, elevation_std, length_std = analyze_centerline(
@@ -160,6 +160,7 @@ class Workspace:
             self.voxel_size,
             self.name,
             plane,
+            direction_map_path=direction_map_path,
         )
         self.properties.update(
             {

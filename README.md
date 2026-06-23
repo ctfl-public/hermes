@@ -15,7 +15,7 @@ It provides an integrated workflow for segmentation, sub-volume sampling, voxel-
 The code is designed for heterogeneous materials where a single bulk average does not capture the variability present across a reconstructed volume.
 
 HERMES can sample many sub-volumes from one or more primary 3D image volumes and compute property distributions for each sampled structure.
-It supports interactive use through a PyQt GUI, scripted serial execution, and MPI-enabled execution on HPC systems.
+It supports interactive use through a PyQt GUI, scripted serial execution through the shared workflow runner, and MPI-enabled execution on HPC systems.
 
 For a complete feature-by-feature reference, see [docs/features.md](docs/features.md).
 
@@ -149,7 +149,7 @@ HERMES includes the following major capabilities.
 - Local direction-map generation for assigning material orientation.
 - Directional porosity profiles and 3D blockwise porosity maps.
 - Property distribution workflows for many sampled sub-volumes.
-- Serial, local parallel, and MPI-enabled execution.
+- Serial workflow execution and MPI-enabled execution.
 - Memory monitoring and scaling workflows for HPC planning.
 
 The full feature description is maintained in [docs/features.md](docs/features.md).

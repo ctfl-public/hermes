@@ -197,12 +197,11 @@ Supported study types include:
 
 ## 12. Parallel And MPI Execution
 
-<!-- TODO: Revisit this section after serial, local parallel, and MPI execution share one backend. -->
+<!-- TODO: Revisit this section after MPI config execution is expanded. -->
 
 HERMES supports several execution modes.
 
 - **Serial execution** processes samples one at a time.
-- **Local multiprocessing** supports high-throughput processing on one machine.
 - **MPI execution** distributes sampled sub-volume tasks across ranks on HPC systems.
 
 The MPI workflow is intended for large ensembles where hundreds of sub-volumes may be processed concurrently.

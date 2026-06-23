@@ -7,6 +7,7 @@ from typing import Iterable
 
 import json
 import numpy as np
+import random
 import tifffile as tiff
 
 from hermes.io import write_tiff_volume
@@ -117,7 +118,10 @@ def run_workspace(
     if "pore_distribution" in property_set:
         workspace.compute_pore_distribution(float(property_options.get("pore_dist_sphere", 30)))
     if "fiber_angle" in property_set or "fiber_length" in property_set:
-        workspace.compute_centerline_orientation(plane=str(property_options.get("fiber_angle_plane", "XY")))
+        workspace.compute_centerline_orientation(
+            plane=str(property_options.get("fiber_angle_plane", "XY")),
+            direction_map_path=output_dir / "direction_maps" / f"{workspace.name}_voxel_directions.txt",
+        )
 
     written: dict[str, str] = {}
     if "stl" in output_set:
@@ -168,10 +172,14 @@ def run_workflow_config(config: dict[str, object], *, base_dir: str | Path = "."
     if len(input_configs) > 1:
         results = []
         property_rows_written = 0
-        for input_config in input_configs:
+        sampling_overrides = _multi_input_sampling_overrides(config, input_configs)
+        for index, input_config in enumerate(input_configs):
+            input_config_run = config
+            if sampling_overrides is not None:
+                input_config_run = {**config, "sampling": sampling_overrides[index]}
             result = _run_input_config(
                 input_config,
-                config,
+                input_config_run,
                 base_dir=base_dir,
                 output_dir=output_dir,
                 output_paths=output_paths,
@@ -271,6 +279,29 @@ def _property_result_count(result: dict[str, object], outputs: Iterable[str]) ->
     if "samples" in result:
         return len(result["samples"])
     return 1
+
+
+def _multi_input_sampling_overrides(
+    config: dict[str, object],
+    input_configs: list[dict[str, object]],
+) -> list[dict[str, object]] | None:
+    sampling = config.get("sampling")
+    if not sampling or sampling.get("mode") != "random" or sampling.get("count_mode") != "total":
+        return None
+
+    rng = random.Random(sampling.get("seed"))
+    counts = [0 for _ in input_configs]
+    for _ in range(int(sampling["count"])):
+        counts[rng.randrange(len(input_configs))] += 1
+
+    overrides = []
+    for index, count in enumerate(counts):
+        input_sampling = dict(sampling)
+        input_sampling["count"] = count
+        if sampling.get("seed") is not None:
+            input_sampling["seed"] = int(sampling["seed"]) + index
+        overrides.append(input_sampling)
+    return overrides
 
 
 def _default_surface_settings() -> dict[str, object]:

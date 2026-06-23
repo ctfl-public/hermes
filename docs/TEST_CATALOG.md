@@ -150,42 +150,42 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Checks: DAT writer output reloads to the original binary volume.
 - Pass tolerance: exact binary volume equality after write/read round trip.
 
-## Serial Pipeline
+## Workflow Pipeline
 
-`test_serial_pipeline_writes_properties_for_known_cube`
+`test_workflow_pipeline_writes_properties_for_known_cube`
 - Input: `cube_16.tif`
-- Checks: serial pipeline writes one property row, one STL, expected property columns, and porosity.
-- Pass tolerance: porosity `1 - 512 / 16^3` with `abs=0.03`.
+- Checks: workflow pipeline writes one property row, one STL, expected property columns, and porosity.
+- Pass tolerance: exact workflow property header, returned porosity `1 - 512 / 16^3` with `abs=0.03`, and exactly one STL output.
 
-`test_serial_pipeline_exported_tiff_and_dat_preserve_known_crop_content`
+`test_workflow_pipeline_exported_tiff_and_dat_preserve_known_crop_content`
 - Input: `cube_16.tif`
-- Checks: a regular crop exported as TIFF and sparse DAT preserves the known binary crop content.
+- Checks: a config-driven explicit-corner crop exported as TIFF and sparse DAT preserves the known binary crop content.
 - Pass tolerance: exported TIFF shape exactly `(8, 8, 8)`, material count exactly `512`, and the reloaded DAT padded interior exactly equals the exported TIFF mask.
 
-`test_serial_pipeline_corner_sampling_writes_one_output_per_corner`
+`test_workflow_pipeline_corner_sampling_writes_one_output_per_corner`
 - Input: `small_primary_0.tif`
-- Checks: two requested corners produce two TIFF outputs.
-- Pass tolerance: exactly `2` TIFF files.
+- Checks: two requested corners produce two TIFF outputs through the workflow runner.
+- Pass tolerance: exactly `2` returned samples and exactly `2` TIFF files.
 
-`test_random_sampling_small_jobs_write_requested_output_count`
+`test_workflow_random_sampling_small_jobs_write_requested_output_count`
 - Input: `solid_primary_24.tif`
-- Checks: four requested random subvolumes produce four TIFF outputs.
-- Pass tolerance: exactly `4` TIFF files.
+- Checks: four requested seeded random subvolumes produce four TIFF outputs.
+- Pass tolerance: exactly `4` returned samples and exactly `4` TIFF files.
 
-`test_serial_pipeline_writes_complete_property_schema_for_fiber_fixture`
+`test_workflow_pipeline_writes_complete_property_schema_for_fiber_fixture`
 - Input: `fiber_angle_48.tif`
 - Checks: a full property-table run writes every selected property column with one value per header entry.
-- Pass tolerance: exact expected schema, one row, row length equals header length, positive fiber diameter, nonnegative fiber-diameter standard deviation, and porosity `< 1.0`.
+- Pass tolerance: exact workflow property schema, one row, row length equals header length, positive fiber diameter, nonnegative fiber-diameter standard deviation, and porosity `< 1.0`.
 
-`test_multi_primary_random_sampling_distributes_outputs_across_input_volumes`
-- Inputs: `small_primary_0.tif`, `small_primary_1.tif`, `small_primary_2.tif`
-- Checks: random sampling can distribute requested samples across multiple primary volumes.
-- Pass tolerance: exactly `6` TIFF files and exactly `2` outputs for each primary volume.
+`test_multi_primary_random_sampling_distributes_total_outputs_across_input_volumes`
+- Input: `solid_primary_24.tif` reused as three named primary volumes.
+- Checks: total-count random sampling distributes requested samples across multiple workflow inputs.
+- Pass tolerance: exactly `3` input result groups, exactly `6` returned samples, exactly `6` TIFF files, and at least one output for each named input.
 
-`test_large_random_sampling_uses_local_parallel_dispatch`
+`test_workflow_random_sampling_large_jobs_write_requested_output_count`
 - Input: `solid_primary_24.tif`
-- Checks: the local multiprocessing dispatch path is used for large random-sampling jobs.
-- Pass tolerance: exactly `1001` submitted local-parallel tasks and each task receives the expected surface settings.
+- Checks: a larger seeded random workflow writes the requested number of outputs.
+- Pass tolerance: exactly `12` returned samples and exactly `12` TIFF files.
 
 ## Config Runner
 

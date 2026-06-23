@@ -11,7 +11,7 @@ from scipy.spatial import cKDTree
 from skimage import filters, morphology
 
 
-def analyze_centerline(image, voxel_size, surface_name, plane: str = "XY"):
+def analyze_centerline(image, voxel_size, surface_name, plane: str = "XY", direction_map_path=None):
     """Analyze fiber-like centerlines and write a voxel direction map."""
     image_smoothed = filters.gaussian(image, sigma=1)
     image_smoothed = (image_smoothed >= np.max(image_smoothed) * 0.5).astype(np.uint8)
@@ -56,7 +56,9 @@ def analyze_centerline(image, voxel_size, surface_name, plane: str = "XY"):
         direction_vectors,
         direction_centerline_ids,
     )
-    save_voxel_direction_map_txt(Path(str(surface_name)).with_suffix("").as_posix() + "_voxel_directions.txt", direction_map)
+    if direction_map_path is None:
+        direction_map_path = Path(str(surface_name)).with_suffix("").as_posix() + "_voxel_directions.txt"
+    save_voxel_direction_map_txt(direction_map_path, direction_map)
 
     azimuth_mean, elevation_mean, length_mean = np.mean(centerline_properties, axis=0)
     azimuth_std, elevation_std, length_std = np.std(centerline_properties, axis=0, ddof=0)
@@ -65,6 +67,8 @@ def analyze_centerline(image, voxel_size, surface_name, plane: str = "XY"):
 
 def save_voxel_direction_map_txt(filename, direction_map):
     """Save per-voxel direction vectors as text."""
+    filename = Path(filename)
+    filename.parent.mkdir(parents=True, exist_ok=True)
     coords = np.column_stack(np.where(~np.isnan(direction_map[..., 0])))
     vectors = direction_map[coords[:, 0], coords[:, 1], coords[:, 2]]
     data = np.column_stack((coords, vectors))

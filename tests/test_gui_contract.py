@@ -120,7 +120,12 @@ def test_gui_run_pipeline_builds_workflow_config_for_multi_input(monkeypatch, tm
                 "voxel_size": 1.0,
             },
         ]
-        assert captured["config"]["sampling"] == {"mode": "random", "volume_length": 12, "count": 2}
+        assert captured["config"]["sampling"] == {
+            "mode": "random",
+            "volume_length": 12,
+            "count": 2,
+            "count_mode": "total",
+        }
         assert captured["config"]["outputs"] == ["tiff"]
     finally:
         ui.close()
