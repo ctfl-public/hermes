@@ -29,6 +29,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector
 import pyvista as pv
 from pyvistaqt import BackgroundPlotter, QtInteractor
+from hermes.gui_adapter import GuiAdapterError, build_serial_run_arguments
 from hermes.serial import run_serial
 from hermes.segmentation import segment_greyscale
 
@@ -1041,182 +1042,80 @@ class UI(QMainWindow):
             self.zmax_input.setText('%i'%self.image_data.shape[0])
     
     def run_voxel2stl(self):
-        # Check if there is at least one file with voxel size in the table
-        if self.tableWidget.rowCount() == 0:
-            self.show_error_message("Error", "Please add at least one file with its voxel size.")
+        try:
+            croppingFlag, cropSettings, surfaceSettings, savingOptions = build_serial_run_arguments(self._serial_run_state())
+        except GuiAdapterError as exc:
+            self.show_error_message("Error", str(exc))
             return
-        
-        # Check if either TIFF, STL, or Properties save options are selected
-        tiffSelected = self.TiffSavecheckBox.isChecked()
-        voxelSelected = self.VoxelSavePathcheckBox.isChecked()
-        stlSelected = self.StlSavePathcheckBox.isChecked()
-        propertiesSelected = self.PropertySavecheckBox.isChecked()
-    
-        if not (tiffSelected or voxelSelected or stlSelected or propertiesSelected):
-            self.show_error_message("Error", "Please select at least one of the save options (TIFF, Voxel, STL, or Properties).")
-            return
-        
-        # Surface Settings
-        surfaceSettings = {
-            "laplacianFlag": self.LaplaciancheckBox.isChecked(),
-            "laplacian_iter": int(self.LaplacianItertextEdit.text()) if self.LaplaciancheckBox.isChecked() else None,
-            "ScreenedPoissonFlag": self.ScreenedPoissoncheckBox.isChecked(),
-            "ScreenedPoisson_iter": int(self.ScreenedPoissonItertextEdit.text()) if self.ScreenedPoissoncheckBox.isChecked() else None,
-            "RemoveIslandsFlag": self.RemoveIslandscheckBox.isChecked()
-            }
-        
+
         print(surfaceSettings)
-        
-        active_index = self.tabWidget.currentIndex()
-        # Map index to cropping flag
-        cropping_flags = ["Regular", "Corners"]  # Adjust names as needed
-        croppingFlag = cropping_flags[active_index] if active_index < len(cropping_flags) else None
-        
         print(croppingFlag)
-        
-        # Extract file names and voxel sizes from table
-        filenames = []
-        filevoxels = []
-        # Check that all files exist and voxel sizes are valid
-        for row in range(self.tableWidget.rowCount()):
-            file_item = self.tableWidget.item(row, 0)
-            voxel_item = self.tableWidget.item(row, 1)
-    
-            if file_item is None or voxel_item is None:
-                self.show_error_message("Error", f"Row {row+1}: Missing file name or voxel size.")
-                return
-    
-            file_path = file_item.text().strip()
-            voxel_size = voxel_item.text().strip()
-    
-            # Check if file exists
-            if not os.path.exists(file_path):
-                self.show_error_message("Error", f"File not found: {file_path}")
-                return
-    
-            # Check if voxel size is a valid number
-            try:
-                voxel_size = float(voxel_size)
-                if voxel_size == 0:
-                    raise ValueError
-            except ValueError:
-                self.show_error_message("Error", f"Row {row+1}: Invalid voxel size. Please enter a number greater than 0.")
-                return
-    
-            filenames.append(file_path)
-            filevoxels.append(voxel_size)
-            
-        # Extract values from the CornertableWidget
-        cornersMTX = []
-        
-        # Check that all rows are valid (integers >= 0)
-        for row in range(self.CornertableWidget.rowCount()):
-            # Get values from each column in the row
-            corner_item_x = self.CornertableWidget.item(row, 0)  # Assuming first column is x values
-            corner_item_y = self.CornertableWidget.item(row, 1)  # Assuming second column is y values
-            corner_item_z = self.CornertableWidget.item(row, 2)  # Assuming third column is z values
-        
-            if corner_item_x is None or corner_item_y is None or corner_item_z is None:
-                self.show_error_message("Error", f"Row {row+1}: Missing corner values.")
-                return
-        
-            # Extract corner values
-            try:
-                corner_x = int(corner_item_x.text().strip())  # Convert to integer
-                corner_y = int(corner_item_y.text().strip())  # Convert to integer
-                corner_z = int(corner_item_z.text().strip())  # Convert to integer
-        
-                # Check if values are greater than or equal to 0
-                if corner_x < 0 or corner_y < 0 or corner_z < 0:
-                    raise ValueError  # Raise error if any value is less than 0
-            except ValueError:
-                self.show_error_message("Error", f"Row {row+1}: Invalid corner values. Please enter integers greater than or equal to 0.")
-                return
-        
-            # Add valid entries to the list
-            cornersMTX.append((corner_x, corner_y, corner_z))
-            
-        # Check if Fiber Diameter Sphere is required but missing
-        fiber_diam_sphere = None
-        if self.FiberDiametercheckBox.isChecked():
-            fiber_diam_sphere_text = self.FiberDiamSpherelineEdit.text().strip()
-            if not fiber_diam_sphere_text:
-                self.show_error_message("Error", "Fiber Diameter Sphere value is required when 'Fiber Diameter' is selected.")
-                return
-            try:
-                fiber_diam_sphere = float(fiber_diam_sphere_text)
-            except ValueError:
-                self.show_error_message("Error", "Invalid Fiber Diameter Sphere value. Please enter a valid number.")
-                return
-    
-        # Check if Pore Distribution Sphere is required but missing
-        pore_dist_sphere = None
-        if self.PoreDistributioncheckBox.isChecked():
-            pore_dist_sphere_text = self.PoreDistSpherelineEdit.text().strip()
-            if not pore_dist_sphere_text:
-                self.show_error_message("Error", "Pore Distribution Sphere value is required when 'Pore Distribution' is selected.")
-                return
-            try:
-                pore_dist_sphere = float(pore_dist_sphere_text)
-            except ValueError:
-                self.show_error_message("Error", "Invalid Pore Distribution Sphere value. Please enter a valid number.")
-                return
-            
-        # Saving Flags
-        savingOptions = {
-            "tiff_save": self.TiffSavecheckBox.isChecked(),
-            "tiff_path": self.TiffSavePathtextEdit.text() if self.TiffSavecheckBox.isChecked() else None,
-            "voxel_save": self.VoxelSavePathcheckBox.isChecked(),
-            "voxel_path": self.VoxelSavePathtextEdit.text() if self.VoxelSavePathcheckBox.isChecked() else None,
-            "stl_save": self.StlSavePathcheckBox.isChecked(),
-            "stl_path": self.StlSavePathtextEdit.text() if self.StlSavePathcheckBox.isChecked() else None,
-            "property_save": self.PropertySavecheckBox.isChecked(),
-            "property_path": self.PropertySavePathtextEdit.text() if self.PropertySavecheckBox.isChecked() else None,
-            "property_options": {
-                "min_max": self.MinMaxcheckBox.isChecked(),
-                "surf_area": self.SurfAreacheckBox.isChecked(),
-                "closed_volume": self.ClosedVolumecheckBox.isChecked(),
-                "vol_by_area": self.VolbyAreacheckBox.isChecked(),
-                "porosity": self.PorositycheckBox.isChecked(),
-                "fiber_diameter": self.FiberDiametercheckBox.isChecked(),
-                "fiber_diam_sphere": int(self.FiberDiamSpherelineEdit.text()) if self.FiberDiametercheckBox.isChecked() else None,
-                "pore_distribution": self.PoreDistributioncheckBox.isChecked(),
-                "pore_dist_sphere": int(self.PoreDistSpherelineEdit.text()) if self.PoreDistributioncheckBox.isChecked() else None,
-                "FiberAngle": self.FiberAnglecheckBox.isChecked(),
-                "FiberAnglePlane": self.PlaneAnglecomboBox.currentText(),
-                "FiberLength": self.FiberLengthcheckBox.isChecked(),
-            }
-        }
-        
         print(savingOptions)
-        
-        if croppingFlag == 'Regular':
-            # Check if volume length and number of volumes are filled
-            volumeLength = self.VolumnLengthlineEdit.text().strip()
-            numVolumes = self.VolumnNumberlineEdit.text().strip()
-            
-            if not volumeLength or not numVolumes:
-                self.show_error_message("Error", "Please enter both the volume length and the number of volumes.")
-                return
-            
-            volumeLength = int(self.VolumnLengthlineEdit.text())
-            numVolumes = int(self.VolumnNumberlineEdit.text())
-            cropSettings = filenames, filevoxels, numVolumes, volumeLength
-            print(cropSettings)
-        elif croppingFlag == 'Corners':
-            volumeLength = self.VolumnLengthCornerlineEdit.text().strip()
-            
-            if not volumeLength:
-                self.show_error_message("Error", "Please enter the volume length.")
-                return
-            volumeLength = int(self.VolumnLengthCornerlineEdit.text())
-            
-            cropSettings = filenames, filevoxels, cornersMTX, volumeLength
-            print(cropSettings)
+        print(cropSettings)
+
         # Close the UI window
         self.close()
         
         run_serial(croppingFlag, cropSettings, surfaceSettings, savingOptions)
+
+    def _serial_run_state(self):
+        input_rows = []
+        for row in range(self.tableWidget.rowCount()):
+            file_item = self.tableWidget.item(row, 0)
+            voxel_item = self.tableWidget.item(row, 1)
+            input_rows.append(
+                (
+                    file_item.text() if file_item is not None else None,
+                    voxel_item.text() if voxel_item is not None else None,
+                )
+            )
+
+        corner_rows = []
+        for row in range(self.CornertableWidget.rowCount()):
+            corner_rows.append(
+                tuple(
+                    item.text() if item is not None else None
+                    for item in [
+                        self.CornertableWidget.item(row, 0),
+                        self.CornertableWidget.item(row, 1),
+                        self.CornertableWidget.item(row, 2),
+                    ]
+                )
+            )
+
+        return {
+            "input_rows": input_rows,
+            "corner_rows": corner_rows,
+            "active_tab_index": self.tabWidget.currentIndex(),
+            "laplacian": self.LaplaciancheckBox.isChecked(),
+            "laplacian_iter": self.LaplacianItertextEdit.text(),
+            "screened_poisson": self.ScreenedPoissoncheckBox.isChecked(),
+            "screened_poisson_iter": self.ScreenedPoissonItertextEdit.text(),
+            "remove_islands": self.RemoveIslandscheckBox.isChecked(),
+            "tiff_save": self.TiffSavecheckBox.isChecked(),
+            "tiff_path": self.TiffSavePathtextEdit.text(),
+            "voxel_save": self.VoxelSavePathcheckBox.isChecked(),
+            "voxel_path": self.VoxelSavePathtextEdit.text(),
+            "stl_save": self.StlSavePathcheckBox.isChecked(),
+            "stl_path": self.StlSavePathtextEdit.text(),
+            "property_save": self.PropertySavecheckBox.isChecked(),
+            "property_path": self.PropertySavePathtextEdit.text(),
+            "min_max": self.MinMaxcheckBox.isChecked(),
+            "surf_area": self.SurfAreacheckBox.isChecked(),
+            "closed_volume": self.ClosedVolumecheckBox.isChecked(),
+            "vol_by_area": self.VolbyAreacheckBox.isChecked(),
+            "porosity": self.PorositycheckBox.isChecked(),
+            "fiber_diameter": self.FiberDiametercheckBox.isChecked(),
+            "fiber_diam_sphere": self.FiberDiamSpherelineEdit.text(),
+            "pore_distribution": self.PoreDistributioncheckBox.isChecked(),
+            "pore_dist_sphere": self.PoreDistSpherelineEdit.text(),
+            "fiber_angle": self.FiberAnglecheckBox.isChecked(),
+            "fiber_angle_plane": self.PlaneAnglecomboBox.currentText(),
+            "fiber_length": self.FiberLengthcheckBox.isChecked(),
+            "regular_volume_length": self.VolumnLengthlineEdit.text(),
+            "regular_num_volumes": self.VolumnNumberlineEdit.text(),
+            "corner_volume_length": self.VolumnLengthCornerlineEdit.text(),
+        }
         
         
     def show_error_message(self, title, message):

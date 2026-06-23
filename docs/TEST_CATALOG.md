@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-53 passed
+57 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -52,6 +52,26 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Inputs: `HERMESGUI.ui`, `cube_16.tif`
 - Checks: the GUI can assemble a serial pipeline call from table entries, sampling controls, save controls, smoothing controls, and property controls.
 - Pass tolerance: crop mode exactly `Regular`, input filename and voxel size preserved exactly, volume length exactly `8`, requested volume count exactly `0`, TIFF saving enabled, Laplacian smoothing enabled with `2` iterations, and surface-area output enabled.
+
+`test_gui_adapter_builds_regular_serial_arguments`
+- Input: `cube_16.tif` plus representative GUI field values
+- Checks: pure GUI adapter builds the same `Regular` serial-run arguments expected by the framework.
+- Pass tolerance: exact crop mode, file path, voxel size `1.0`, volume length `8`, requested count `0`, Laplacian iterations `2`, and requested TIFF/property options.
+
+`test_gui_adapter_builds_corner_serial_arguments`
+- Input: `cube_16.tif` plus two explicit GUI corner rows
+- Checks: pure GUI adapter builds `Corners` serial-run arguments without needing to launch Qt.
+- Pass tolerance: exact crop mode, exact corners `(0, 0, 0)` and `(4, 5, 6)`, and volume length `12`.
+
+`test_gui_adapter_rejects_missing_outputs`
+- Input: valid GUI file settings with all output checkboxes disabled
+- Checks: pure GUI adapter rejects runs that would produce no output.
+- Pass tolerance: raises `GuiAdapterError` with the expected output-selection message.
+
+`test_gui_adapter_rejects_invalid_corner_row`
+- Input: valid GUI file settings with a negative corner coordinate
+- Checks: pure GUI adapter rejects invalid corner coordinates before calling the framework.
+- Pass tolerance: raises `GuiAdapterError` with the expected invalid-corner message.
 
 ## IO And Mesh
 
