@@ -705,7 +705,7 @@ class UI(QMainWindow):
             }
 
             try:
-                settings['workflowConfig'] = build_workflow_config(self._serial_run_state())
+                settings['workflowConfig'] = build_workflow_config(self._workflow_run_state())
             except GuiAdapterError as exc:
                 settings['workflowConfigExportError'] = str(exc)
 
@@ -1068,20 +1068,18 @@ class UI(QMainWindow):
             self.zmax_input.setText('%i'%self.image_data.shape[0])
     
     def run_voxel2stl(self):
-        state = self._serial_run_state()
+        state = self._workflow_run_state()
         try:
             workflow_config = build_workflow_config(state)
         except GuiAdapterError as exc:
             self.show_error_message("Error", str(exc))
             return
 
-        print(workflow_config)
-
         # Close the UI window
         self.close()
         run_workflow_config(workflow_config)
 
-    def _serial_run_state(self):
+    def _workflow_run_state(self):
         input_rows = []
         for row in range(self.tableWidget.rowCount()):
             file_item = self.tableWidget.item(row, 0)

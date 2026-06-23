@@ -231,7 +231,7 @@ def test_gui_adapter_exports_multi_input_workflow_config(fixture_dir, tmp_path):
     assert config["sampling"] == {"mode": "grid", "volume_length": 12}
 
 
-def test_gui_adapter_converts_workflow_config_to_legacy_settings(tmp_path):
+def test_gui_adapter_converts_workflow_config_to_gui_settings(tmp_path):
     config = {
         "inputs": [
             {"path": "input/a.tif", "voxel_size": 1.0},

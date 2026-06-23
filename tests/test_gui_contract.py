@@ -217,7 +217,7 @@ def test_gui_load_settings_accepts_raw_workflow_config(monkeypatch, tmp_path, fi
         ui.close()
 
 
-def test_gui_run_pipeline_reports_config_errors_without_serial_fallback(monkeypatch, fixture_dir, qtbot=None):
+def test_gui_run_pipeline_reports_config_errors_without_running(monkeypatch, fixture_dir, qtbot=None):
     pytest.importorskip("PyQt5")
     pytest.importorskip("pyvista")
     pytest.importorskip("pyvistaqt")
