@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-71 passed
+72 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -117,6 +117,11 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Inputs: `HERMESGUI.ui`, `cube_16.tif`, and a mocked raw framework config load path.
 - Checks: the GUI `Load Settings` workflow accepts a raw framework config and populates the current GUI settings fields.
 - Pass tolerance: exact table file path and voxel size, selected TIFF/property outputs, output paths resolved relative to the config file, selected surface-area and porosity flags, Laplacian iteration `2`, and grid sampling volume length `8` with count `0`.
+
+`test_gui_run_pipeline_reports_config_errors_without_serial_fallback`
+- Inputs: `HERMESGUI.ui`, `cube_16.tif`, and a GUI run request with no selected outputs.
+- Checks: the GUI Run button reports the config validation error and does not run another backend.
+- Pass tolerance: error title exactly `Error`, error text contains `Please select at least one`, and the workflow runner is not called.
 
 ## IO And Mesh
 

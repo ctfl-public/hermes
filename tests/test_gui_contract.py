@@ -215,3 +215,37 @@ def test_gui_load_settings_accepts_raw_workflow_config(monkeypatch, tmp_path, fi
         assert ui.VolumnNumberlineEdit.text() == "0"
     finally:
         ui.close()
+
+
+def test_gui_run_pipeline_reports_config_errors_without_serial_fallback(monkeypatch, fixture_dir, qtbot=None):
+    pytest.importorskip("PyQt5")
+    pytest.importorskip("pyvista")
+    pytest.importorskip("pyvistaqt")
+    from PyQt5.QtWidgets import QApplication, QTableWidgetItem
+    import HERMES
+    from HERMES import UI
+
+    captured = {}
+
+    def fail_run_workflow_config(config):
+        raise AssertionError("workflow should not run with invalid GUI state")
+
+    monkeypatch.setattr(HERMES, "run_workflow_config", fail_run_workflow_config)
+
+    app = QApplication.instance() or QApplication([])
+    ui = UI()
+    try:
+        monkeypatch.setattr(ui, "show_error_message", lambda title, message: captured.update({"title": title, "message": message}))
+        ui.tableWidget.setRowCount(1)
+        ui.tableWidget.setItem(0, 0, QTableWidgetItem(str(fixture_dir / "cube_16.tif")))
+        ui.tableWidget.setItem(0, 1, QTableWidgetItem("1.0"))
+        ui.tabWidget.setCurrentIndex(0)
+        ui.VolumnLengthlineEdit.setText("8")
+        ui.VolumnNumberlineEdit.setText("0")
+
+        ui.run_voxel2stl()
+
+        assert captured["title"] == "Error"
+        assert "Please select at least one" in captured["message"]
+    finally:
+        ui.close()

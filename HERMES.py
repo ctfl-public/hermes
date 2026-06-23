@@ -32,11 +32,9 @@ import pyvista as pv
 from pyvistaqt import BackgroundPlotter, QtInteractor
 from hermes.gui_adapter import (
     GuiAdapterError,
-    build_serial_run_arguments,
     build_workflow_config,
     legacy_settings_from_workflow_config,
 )
-from hermes.serial import run_serial
 from hermes.segmentation import segment_greyscale
 from hermes.workflow import run_workflow_config
 
@@ -1060,20 +1058,7 @@ class UI(QMainWindow):
         try:
             workflow_config = build_workflow_config(state)
         except GuiAdapterError as exc:
-            try:
-                croppingFlag, cropSettings, surfaceSettings, savingOptions = build_serial_run_arguments(state)
-            except GuiAdapterError:
-                self.show_error_message("Error", str(exc))
-                return
-
-            print(surfaceSettings)
-            print(croppingFlag)
-            print(savingOptions)
-            print(cropSettings)
-
-            # Close the UI window
-            self.close()
-            run_serial(croppingFlag, cropSettings, surfaceSettings, savingOptions)
+            self.show_error_message("Error", str(exc))
             return
 
         print(workflow_config)
