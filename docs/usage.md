@@ -50,7 +50,8 @@ The example config generates a tiny binary cube, writes outputs to `examples/qui
 This is the first stable command shape for the unified framework.
 The config runner also supports an explicit crop block with `corner` and `size` fields for reproducible sub-volume extraction.
 It also supports a `sampling` block for `full`, `corners`, `grid`, and seeded `random` sub-volume generation.
-Future GUI, serial, and MPI cleanup should converge on this config model.
+GUI settings files saved from supported workflows include an embedded `workflowConfig` block and can be passed directly to `python -m hermes run`.
+Future MPI cleanup should converge on this config model.
 
 ## MPI Workflow
 
@@ -103,6 +104,7 @@ It supports previewing slices and histograms.
 It supports cropping segmented volumes.
 It supports rendering voxel masks.
 It supports saving segmented TIFFs.
+For supported property workflows, `Save Settings` also stores a framework `workflowConfig` that can be rerun from the CLI.
 
 ## Segmentation Workflow
 

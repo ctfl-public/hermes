@@ -135,6 +135,11 @@ def test_gui_adapter_exports_regular_workflow_config(fixture_dir, tmp_path):
         "output_dir": str(tmp_path / "output"),
         "outputs": ["tiff", "properties"],
         "properties": ["surface_area", "porosity"],
+        "property_options": {
+            "fiber_diam_sphere": None,
+            "pore_dist_sphere": None,
+            "fiber_angle_plane": "XY",
+        },
         "sampling": {"mode": "grid", "volume_length": 8},
     }
 
@@ -160,8 +165,36 @@ def test_gui_adapter_exports_corner_workflow_config(fixture_dir, tmp_path):
     assert config["output_dir"] == str(tmp_path / "output")
 
 
-def test_gui_adapter_config_export_rejects_unsupported_properties(fixture_dir, tmp_path):
-    state = base_gui_state(fixture_dir, tmp_path, min_max=True)
+def test_gui_adapter_exports_advanced_property_config(fixture_dir, tmp_path):
+    state = base_gui_state(
+        fixture_dir,
+        tmp_path,
+        min_max=True,
+        fiber_diameter=True,
+        fiber_diam_sphere="6",
+        pore_distribution=True,
+        pore_dist_sphere="6",
+        fiber_angle=True,
+        fiber_angle_plane="XZ",
+        fiber_length=True,
+        tiff_path=str(tmp_path / "output" / "tiff"),
+        property_path=str(tmp_path / "output" / "properties.txt"),
+    )
 
-    with pytest.raises(GuiAdapterError, match="Config export does not yet support"):
-        build_workflow_config(state)
+    config = build_workflow_config(state)
+
+    assert config["properties"] == [
+        "min_extents",
+        "max_extents",
+        "surface_area",
+        "porosity",
+        "fiber_diameter",
+        "pore_distribution",
+        "fiber_angle",
+        "fiber_length",
+    ]
+    assert config["property_options"] == {
+        "fiber_diam_sphere": 6,
+        "pore_dist_sphere": 6,
+        "fiber_angle_plane": "XZ",
+    }

@@ -146,3 +146,65 @@ def test_config_runner_corner_sampling_writes_one_output_per_corner(tmp_path):
     assert len(list((output / "tiff").glob("*.tif"))) == 2
     assert len(list((output / "voxels").glob("*.dat"))) == 2
     assert (output / "properties.txt").exists()
+
+
+def test_run_config_accepts_gui_settings_with_embedded_workflow_config(tmp_path):
+    config_path = tmp_path / "gui_settings.json"
+    settings = {
+        "fileNameTable": [["input/source.tif", "1.0"]],
+        "workflowConfig": {
+            "name": "gui_cube",
+            "input": {
+                "path": "input/gui_cube.tif",
+                "voxel_size": 1.0,
+                "generate": {
+                    "kind": "binary_cube",
+                    "shape": [16, 16, 16],
+                    "bounds": [[4, 12], [4, 12], [4, 12]],
+                },
+            },
+            "output_dir": "gui_output",
+            "outputs": ["tiff", "properties"],
+            "properties": ["surface_area", "porosity"],
+        },
+    }
+    config_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
+
+    result = run_config(config_path)
+
+    output = tmp_path / "gui_output"
+    assert result["name"] == "gui_cube"
+    assert (output / "tiff" / "gui_cube.tif").exists()
+    assert (output / "properties.txt").exists()
+
+
+def test_config_runner_computes_advanced_gui_properties(tmp_path):
+    config_path = tmp_path / "advanced_config.json"
+    config = {
+        "name": "advanced_cube",
+        "input": {
+            "path": "input/advanced_cube.tif",
+            "voxel_size": 1.0,
+            "generate": {
+                "kind": "binary_cube",
+                "shape": [16, 16, 16],
+                "bounds": [[4, 12], [4, 12], [4, 12]],
+            },
+        },
+        "output_dir": "advanced_output",
+        "outputs": ["properties"],
+        "properties": ["min_extents", "max_extents", "fiber_diameter", "pore_distribution"],
+        "property_options": {
+            "fiber_diam_sphere": 6,
+            "pore_dist_sphere": 6,
+        },
+    }
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+    result = run_config(config_path)
+
+    assert "min_extents" in result["properties"]
+    assert "max_extents" in result["properties"]
+    assert "fiber_diameter_mean" in result["properties"]
+    assert "pore_size_mean" in result["properties"]
+    assert (tmp_path / "advanced_output" / "properties.txt").exists()

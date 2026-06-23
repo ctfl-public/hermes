@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-61 passed
+63 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -83,10 +83,10 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Checks: pure GUI adapter exports a framework config for explicit-corner sampling.
 - Pass tolerance: exact output root and sampling config with corners `[[0, 0, 0], [4, 5, 6]]` and size `12`.
 
-`test_gui_adapter_config_export_rejects_unsupported_properties`
-- Input: valid GUI field values with min/max extent output selected
-- Checks: pure GUI adapter rejects config export for properties not yet supported by the shared config runner.
-- Pass tolerance: raises `GuiAdapterError` with the expected unsupported-property message.
+`test_gui_adapter_exports_advanced_property_config`
+- Input: valid GUI field values with min/max extents, fiber diameter, pore distribution, fiber angle, and fiber length selected
+- Checks: pure GUI adapter exports advanced GUI property selections into the shared config schema.
+- Pass tolerance: exact exported property list and exact property options for fiber sphere size, pore sphere size, and reference plane.
 
 `test_gui_save_settings_embeds_framework_config`
 - Inputs: `HERMESGUI.ui`, `cube_16.tif`, and a mocked settings-save path
@@ -173,6 +173,16 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: JSON config file that generates a larger binary cube volume and crops the exact material cube.
 - Checks: config-driven explicit-corner cropping preserves TIFF and DAT content and computes near-zero porosity for the all-material crop.
 - Pass tolerance: TIFF shape exactly `(8, 8, 8)`, TIFF material count exactly `512`, DAT shape exactly `(10, 10, 10)`, DAT material count exactly `512`, closed volume `512 +/- 80`, and porosity `0.0 +/- 0.03`.
+
+`test_run_config_accepts_gui_settings_with_embedded_workflow_config`
+- Input: GUI-style settings JSON containing an embedded `workflowConfig`
+- Checks: `run_config()` accepts the GUI settings file directly and runs the embedded framework workflow.
+- Pass tolerance: result name exactly `gui_cube`, TIFF output exists, and property table exists.
+
+`test_config_runner_computes_advanced_gui_properties`
+- Input: JSON config selecting min/max extents, fiber diameter, and pore distribution
+- Checks: config-driven workflow computes advanced GUI property selections through the shared framework.
+- Pass tolerance: result contains `min_extents`, `max_extents`, `fiber_diameter_mean`, and `pore_size_mean`, and a property table is written.
 
 `test_sampling_helpers_make_deterministic_grid_and_seeded_random_specs`
 - Input: synthetic `(24, 24, 24)` volume dimensions.

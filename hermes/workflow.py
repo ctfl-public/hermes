@@ -26,6 +26,7 @@ def run_volume(
     name: str | None = None,
     outputs: Iterable[str] = DEFAULT_OUTPUTS,
     properties: Iterable[str] = DEFAULT_PROPERTIES,
+    property_options: dict[str, object] | None = None,
     pad: bool = True,
     crop: dict[str, object] | None = None,
 ) -> dict[str, object]:
@@ -48,6 +49,7 @@ def run_volume(
         output_dir,
         outputs=outputs,
         properties=properties,
+        property_options=property_options,
         pad=pad,
         append_properties=False,
     )
@@ -59,6 +61,7 @@ def run_workspace(
     *,
     outputs: Iterable[str] = DEFAULT_OUTPUTS,
     properties: Iterable[str] = DEFAULT_PROPERTIES,
+    property_options: dict[str, object] | None = None,
     pad: bool = True,
     append_properties: bool = False,
 ) -> dict[str, object]:
@@ -67,6 +70,7 @@ def run_workspace(
     output_dir.mkdir(parents=True, exist_ok=True)
     output_set = set(outputs)
     property_set = set(properties)
+    property_options = property_options or {}
 
     if pad:
         workspace.pad()
@@ -81,6 +85,16 @@ def run_workspace(
         workspace.compute_volume_by_area()
     if "porosity" in property_set:
         workspace.compute_porosity()
+    if "min_extents" in property_set:
+        workspace.compute_min_extents()
+    if "max_extents" in property_set:
+        workspace.compute_max_extents()
+    if "fiber_diameter" in property_set:
+        workspace.compute_fiber_diameter(float(property_options.get("fiber_diam_sphere", 10)))
+    if "pore_distribution" in property_set:
+        workspace.compute_pore_distribution(float(property_options.get("pore_dist_sphere", 30)))
+    if "fiber_angle" in property_set or "fiber_length" in property_set:
+        workspace.compute_centerline_orientation(plane=str(property_options.get("fiber_angle_plane", "XY")))
 
     written: dict[str, str] = {}
     if "stl" in output_set:
@@ -113,6 +127,7 @@ def run_config(config_path: str | Path) -> dict[str, object]:
     config_path = Path(config_path)
     with config_path.open("r", encoding="utf-8") as file_obj:
         config = json.load(file_obj)
+    config = _unwrap_workflow_config(config)
 
     base_dir = config_path.parent
     input_config = config["input"]
@@ -141,6 +156,7 @@ def run_config(config_path: str | Path) -> dict[str, object]:
                     output_dir,
                     outputs=config.get("outputs", DEFAULT_OUTPUTS),
                     properties=config.get("properties", DEFAULT_PROPERTIES),
+                    property_options=config.get("property_options"),
                     pad=bool(config.get("pad", True)),
                     append_properties=index > 0,
                 )
@@ -154,9 +170,17 @@ def run_config(config_path: str | Path) -> dict[str, object]:
         name=config.get("name"),
         outputs=config.get("outputs", DEFAULT_OUTPUTS),
         properties=config.get("properties", DEFAULT_PROPERTIES),
+        property_options=config.get("property_options"),
         pad=bool(config.get("pad", True)),
         crop=config.get("crop"),
     )
+
+
+def _unwrap_workflow_config(config: dict[str, object]) -> dict[str, object]:
+    """Accept either a raw workflow config or a GUI settings file containing one."""
+    if "workflowConfig" in config:
+        return config["workflowConfig"]
+    return config
 
 
 def _resolve_path(path: str | Path, base_dir: Path) -> Path:

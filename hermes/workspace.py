@@ -124,6 +124,20 @@ class Workspace:
         self.properties["porosity"] = value
         return value
 
+    def compute_min_extents(self) -> list[float]:
+        if self.vertices is None or self.faces is None:
+            self.generate_mesh()
+        value = np.min(self.vertices, axis=0).astype(float).tolist()
+        self.properties["min_extents"] = value
+        return value
+
+    def compute_max_extents(self) -> list[float]:
+        if self.vertices is None or self.faces is None:
+            self.generate_mesh()
+        value = np.max(self.vertices, axis=0).astype(float).tolist()
+        self.properties["max_extents"] = value
+        return value
+
     def compute_fiber_diameter(self, sphere_size: float) -> tuple[float, float, list[float]]:
         value = fiber_diameter_distribution(self._unpadded_matrix(), self.voxel_size, sphere_size)
         self.properties["fiber_diameter_mean"] = value[0]

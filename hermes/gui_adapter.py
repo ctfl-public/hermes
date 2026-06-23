@@ -47,6 +47,7 @@ def build_workflow_config(state: dict) -> dict:
         "output_dir": output_dir,
         "outputs": _config_outputs(saving_options),
         "properties": _config_properties(saving_options["property_options"]),
+        "property_options": _config_property_options(saving_options["property_options"]),
     }
 
     sampling = _config_sampling(state, filevoxels[0])
@@ -177,27 +178,33 @@ def _config_outputs(saving_options):
 
 def _config_properties(property_options):
     supported = {
+        "min_max": ("min_extents", "max_extents"),
         "surf_area": "surface_area",
         "closed_volume": "closed_volume",
         "vol_by_area": "volume_by_area",
         "porosity": "porosity",
+        "fiber_diameter": "fiber_diameter",
+        "pore_distribution": "pore_distribution",
+        "FiberAngle": "fiber_angle",
+        "FiberLength": "fiber_length",
     }
-    unsupported = {
-        "min_max": "Min/max extents",
-        "fiber_diameter": "Fiber diameter",
-        "pore_distribution": "Pore distribution",
-        "FiberAngle": "Fiber angle",
-        "FiberLength": "Fiber length",
-    }
-    selected_unsupported = [label for key, label in unsupported.items() if property_options.get(key)]
-    if selected_unsupported:
-        raise GuiAdapterError(
-            "Config export does not yet support these GUI properties: "
-            + ", ".join(selected_unsupported)
-            + ". Use the GUI Run button for this workflow."
-        )
+    properties = []
+    for gui_name, config_name in supported.items():
+        if not property_options.get(gui_name):
+            continue
+        if isinstance(config_name, tuple):
+            properties.extend(config_name)
+        else:
+            properties.append(config_name)
+    return properties
 
-    return [config_name for gui_name, config_name in supported.items() if property_options.get(gui_name)]
+
+def _config_property_options(property_options):
+    return {
+        "fiber_diam_sphere": property_options.get("fiber_diam_sphere"),
+        "pore_dist_sphere": property_options.get("pore_dist_sphere"),
+        "fiber_angle_plane": property_options.get("FiberAnglePlane", "XY"),
+    }
 
 
 def _config_sampling(state, voxel_size):
