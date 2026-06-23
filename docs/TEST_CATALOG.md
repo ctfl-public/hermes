@@ -58,15 +58,15 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Checks: GUI Run builds and launches a framework workflow config for multi-input workflows.
 - Pass tolerance: both input filenames and voxel sizes preserved exactly, sampling config exactly `{"mode": "random", "volume_length": 12, "count": 2}`, and outputs exactly `["tiff"]`.
 
-`test_gui_adapter_builds_regular_serial_arguments`
-- Input: `cube_16.tif` plus representative GUI field values
-- Checks: pure GUI adapter builds the same `Regular` serial-run arguments expected by the framework.
-- Pass tolerance: exact crop mode, file path, voxel size `1.0`, volume length `8`, requested count `0`, Laplacian iterations `2`, and requested TIFF/property options.
+`test_gui_adapter_exports_full_volume_workflow_config`
+- Input: `cube_16.tif` plus representative GUI field values with full-volume regular sampling.
+- Checks: pure GUI adapter exports a framework config for full-volume processing without a sampling block.
+- Pass tolerance: exact input path, voxel size `1.0`, no `sampling` key, Laplacian iteration `2`, outputs exactly `["tiff", "properties"]`, and properties exactly `["surface_area", "porosity"]`.
 
-`test_gui_adapter_builds_corner_serial_arguments`
-- Input: `cube_16.tif` plus two explicit GUI corner rows
-- Checks: pure GUI adapter builds `Corners` serial-run arguments without needing to launch Qt.
-- Pass tolerance: exact crop mode, exact corners `(0, 0, 0)` and `(4, 5, 6)`, and volume length `12`.
+`test_gui_adapter_exports_random_workflow_config`
+- Input: `cube_16.tif` plus representative GUI field values with random regular sampling.
+- Checks: pure GUI adapter exports a framework config for random sub-volume sampling.
+- Pass tolerance: sampling config exactly `{"mode": "random", "volume_length": 12, "count": 4}`.
 
 `test_gui_adapter_rejects_missing_outputs`
 - Input: valid GUI file settings with all output checkboxes disabled

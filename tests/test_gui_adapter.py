@@ -4,7 +4,6 @@ import pytest
 
 from hermes.gui_adapter import (
     GuiAdapterError,
-    build_serial_run_arguments,
     build_workflow_config,
     legacy_settings_from_workflow_config,
 )
@@ -51,47 +50,47 @@ def base_gui_state(fixture_dir, tmp_path, **overrides):
     return state
 
 
-def test_gui_adapter_builds_regular_serial_arguments(fixture_dir, tmp_path):
-    cropping_flag, crop_settings, surface_settings, saving_options = build_serial_run_arguments(
-        base_gui_state(fixture_dir, tmp_path)
+def test_gui_adapter_exports_full_volume_workflow_config(fixture_dir, tmp_path):
+    config = build_workflow_config(
+        base_gui_state(
+            fixture_dir,
+            tmp_path,
+            regular_volume_length="0",
+            regular_num_volumes="0",
+        )
     )
 
-    filenames, filevoxels, num_volumes, volume_length = crop_settings
-    assert cropping_flag == "Regular"
-    assert filenames == [str(fixture_dir / "cube_16.tif")]
-    assert filevoxels == [1.0]
-    assert num_volumes == 0
-    assert volume_length == 8
-    assert surface_settings == {
+    assert "sampling" not in config
+    assert config["input"] == {
+        "path": str(fixture_dir / "cube_16.tif"),
+        "voxel_size": 1.0,
+    }
+    assert config["surface_settings"] == {
         "laplacianFlag": True,
         "laplacian_iter": 2,
         "ScreenedPoissonFlag": False,
         "ScreenedPoisson_iter": None,
         "RemoveIslandsFlag": False,
     }
-    assert saving_options["tiff_save"] is True
-    assert saving_options["property_save"] is True
-    assert saving_options["property_options"]["surf_area"] is True
-    assert saving_options["property_options"]["porosity"] is True
+    assert config["outputs"] == ["tiff", "properties"]
+    assert config["properties"] == ["surface_area", "porosity"]
 
 
-def test_gui_adapter_builds_corner_serial_arguments(fixture_dir, tmp_path):
+def test_gui_adapter_exports_random_workflow_config(fixture_dir, tmp_path):
     state = base_gui_state(
         fixture_dir,
         tmp_path,
-        active_tab_index=1,
-        corner_rows=[("0", "0", "0"), ("4", "5", "6")],
-        corner_volume_length="12",
+        regular_volume_length="12",
+        regular_num_volumes="4",
     )
 
-    cropping_flag, crop_settings, _, _ = build_serial_run_arguments(state)
+    config = build_workflow_config(state)
 
-    filenames, filevoxels, corners, volume_length = crop_settings
-    assert cropping_flag == "Corners"
-    assert filenames == [str(fixture_dir / "cube_16.tif")]
-    assert filevoxels == [1.0]
-    assert corners == [(0, 0, 0), (4, 5, 6)]
-    assert volume_length == 12
+    assert config["sampling"] == {
+        "mode": "random",
+        "volume_length": 12,
+        "count": 4,
+    }
 
 
 def test_gui_adapter_rejects_missing_outputs(fixture_dir, tmp_path):
@@ -105,7 +104,7 @@ def test_gui_adapter_rejects_missing_outputs(fixture_dir, tmp_path):
     )
 
     with pytest.raises(GuiAdapterError, match="Please select at least one"):
-        build_serial_run_arguments(state)
+        build_workflow_config(state)
 
 
 def test_gui_adapter_rejects_invalid_corner_row(fixture_dir, tmp_path):
@@ -118,7 +117,7 @@ def test_gui_adapter_rejects_invalid_corner_row(fixture_dir, tmp_path):
     )
 
     with pytest.raises(GuiAdapterError, match="Invalid corner values"):
-        build_serial_run_arguments(state)
+        build_workflow_config(state)
 
 
 def test_gui_adapter_exports_regular_workflow_config(fixture_dir, tmp_path):

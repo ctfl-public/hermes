@@ -9,32 +9,11 @@ class GuiAdapterError(ValueError):
     """Raised when GUI state cannot be converted into workflow settings."""
 
 
-def build_serial_run_arguments(state: dict):
-    """Build ``run_serial`` arguments from GUI state."""
-    filenames, filevoxels = _parse_input_rows(state["input_rows"])
-    corners = _parse_corner_rows(state.get("corner_rows", []))
-    surface_settings = _surface_settings(state)
-    saving_options = _saving_options(state)
-    cropping_flag = _cropping_flag(state.get("active_tab_index", 0))
-
-    if cropping_flag == "Regular":
-        volume_length = _required_int(state.get("regular_volume_length"), "Please enter both the volume length and the number of volumes.")
-        num_volumes = _required_int(state.get("regular_num_volumes"), "Please enter both the volume length and the number of volumes.")
-        crop_settings = filenames, filevoxels, num_volumes, volume_length
-    elif cropping_flag == "Corners":
-        volume_length = _required_int(state.get("corner_volume_length"), "Please enter the volume length.")
-        crop_settings = filenames, filevoxels, corners, volume_length
-    else:
-        raise GuiAdapterError("Unknown workflow tab selected.")
-
-    return cropping_flag, crop_settings, surface_settings, saving_options
-
-
 def build_workflow_config(state: dict) -> dict:
     """Build a shared workflow config from GUI state when the config model supports it."""
     filenames, filevoxels = _parse_input_rows(state["input_rows"])
 
-    _, _, _, saving_options = build_serial_run_arguments(state)
+    saving_options = _saving_options(state)
     output_dir = _config_output_dir(saving_options)
     config = {
         "output_dir": output_dir,
