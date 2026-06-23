@@ -22,9 +22,17 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import json
 from numbers import Number
 from scipy.spatial import cKDTree
-from hermes.centerlines import analyze_centerline
+from hermes.centerlines import (
+    analyze_centerline,
+    calculate_centerline_properties as framework_calculate_centerline_properties,
+    map_direction_to_material_voxels as framework_map_direction_to_material_voxels,
+    order_component as framework_order_component,
+    save_voxel_direction_map_txt as framework_save_voxel_direction_map_txt,
+    split_and_order_centerlines as framework_split_and_order_centerlines,
+)
 from hermes.io import load_volume, write_chen_format
 from hermes.mesh import check_mesh, create_padding, generate_mesh, load_pymeshlab_mesh, load_trimesh, repair_mesh, smooth_mesh
+from hermes.property_table import compute_and_write_legacy_properties, write_legacy_property_row
 from hermes.properties import fiber_diameter_distribution, pore_distribution
 
 def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
@@ -298,73 +306,15 @@ def fixMesh(FileName,vertices,faces):
     return FileName, vertices, faces
 
 def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savingOptions,surfacename):
-    propertyList = [stlName]
-    propertyNames = ['StlName']  # To store the names of selected properties
-
-    if savingOptions['property_options']['min_max']:
-        min_extents = np.min(vertices, axis=0)
-        max_extents = np.max(vertices, axis=0)
-        propertyList.extend(list(min_extents) + list(max_extents))
-        propertyNames.extend(["MinExtentsX", "MinExtentsY", "MinExtentsZ",
-                              "MaxExtentsX", "MaxExtentsY", "MaxExtentsZ"])
-
-    if savingOptions['property_options']['surf_area'] or savingOptions['property_options']['closed_volume'] or savingOptions['property_options']['porosity'] or savingOptions['property_options']['vol_by_area']:
-        trimesh_mesh = loadMeshTrimesh(vertices, faces)
-        mesh_volume = trimesh_mesh.volume
-        mesh_surface_area = trimesh_mesh.area
-        
-    if savingOptions['property_options']['surf_area']:
-        propertyList.append(mesh_surface_area)
-        propertyNames.append("SurfaceArea")
-
-    if savingOptions['property_options']['closed_volume']:
-        propertyList.append(mesh_volume)
-        propertyNames.append("ClosedVolume")
-
-    if savingOptions['property_options']['vol_by_area']:
-        lengthbyarea = mesh_volume / mesh_surface_area
-        propertyList.append(lengthbyarea)
-        propertyNames.append("Volume/SurfaceArea")
-
-    if savingOptions['property_options']['porosity']:
-        fulltempVolume = temp_volume.shape[0] * temp_volume.shape[1] * temp_volume.shape[2] * tifvoxelsize**3
-        porosity = 1 - (mesh_volume / fulltempVolume)
-        propertyList.append(porosity)
-        propertyNames.append("Porosity")
-
-    if savingOptions['property_options']['fiber_diameter']:
-        meanDiameter, stdDiameter = getDiamter(temp_volume, tifvoxelsize, savingOptions['property_options']['fiber_diam_sphere'])
-        propertyList.append(meanDiameter)
-        propertyList.append(stdDiameter)
-        propertyNames.extend(["fiber_diameter_Mean", "fiber_diameter_Std"])
-
-    if savingOptions['property_options']['pore_distribution']:
-        meanPore, stdPore, poreDistribution = getPoreDistribution(temp_volume, tifvoxelsize, savingOptions['property_options']['pore_dist_sphere'])
-        propertyList.append(meanPore)
-        propertyList.append(stdPore)
-        propertyList.append(poreDistribution)
-        propertyNames.extend(["meanPore", "stdPore", "poreDistribution"])
-    
-    if savingOptions['property_options']['FiberAngle'] or savingOptions['property_options']['FiberLength']:
-        azimuthMean, elevationMean, lengthMean, azimuthSTD, elevationSTD,lengthSTD  = analyzeCenterLine(temp_volume,tifvoxelsize,surfacename,savingOptions['property_options']['FiberAnglePlane'])
-        if savingOptions['property_options']['FiberAngle']:
-            propertyList.append(savingOptions['property_options']['FiberAnglePlane'])
-            propertyNames.append("ReferencePlane")
-            propertyList.append(azimuthMean)
-            propertyNames.append("MeanAzimuthAngle")
-            propertyList.append(azimuthSTD)
-            propertyNames.append("StDAzimuthAngle")
-            propertyList.append(elevationMean)
-            propertyNames.append("MeanElevationAngle")
-            propertyList.append(elevationSTD)
-            propertyNames.append("StDElevationAngle")
-        if savingOptions['property_options']['FiberLength']:
-            propertyList.append(lengthMean)
-            propertyNames.append("MeanLength")
-            propertyList.append(lengthSTD)
-            propertyNames.append("StDLength")
-        
-    writeProperties(savingOptions, propertyNames, propertyList)
+    compute_and_write_legacy_properties(
+        stlName,
+        vertices,
+        faces,
+        temp_volume,
+        tifvoxelsize,
+        savingOptions,
+        surfacename,
+    )
 
 def getPoreDistribution(image_volume, tifvoxelsize, sphereSize):
     return pore_distribution(image_volume, tifvoxelsize, sphereSize)
@@ -377,280 +327,21 @@ def analyzeCenterLine(image,tifvoxelsize,surfacename,plane='XY'):
     return analyze_centerline(image, tifvoxelsize, surfacename, plane=plane)
 
 def save_voxel_direction_map_txt(filename, direction_map):
-    coords = np.column_stack(np.where(~np.isnan(direction_map[..., 0])))
-
-    vectors = direction_map[
-        coords[:, 0],
-        coords[:, 1],
-        coords[:, 2]
-    ]
-
-    data = np.column_stack((coords, vectors))
-
-    np.savetxt(
-        filename,
-        data,
-        fmt="%.6f",
-        header="x y z vx vy vz",
-        comments=''
-    )
+    return framework_save_voxel_direction_map_txt(filename, direction_map)
 
 def map_direction_to_material_voxels(image, direction_coords, direction_vectors, direction_centerline_ids=None):
-    material_coords = np.column_stack(np.where(image > 0))
-
-    tree = cKDTree(direction_coords)
-    distances, nearest_idx = tree.query(material_coords, k=1)
-
-    # NaN means "no material / no direction assigned"
-    direction_map = np.full(image.shape + (3,), np.nan, dtype=np.float32)
-    distance_map = np.full(image.shape, np.nan, dtype=np.float32)
-
-    if direction_centerline_ids is not None:
-        centerline_id_map = np.full(image.shape, -1, dtype=np.int32)
-    else:
-        centerline_id_map = None
-
-    x = material_coords[:, 0]
-    y = material_coords[:, 1]
-    z = material_coords[:, 2]
-
-    direction_map[x, y, z, :] = direction_vectors[nearest_idx]
-    distance_map[x, y, z] = distances
-
-    if direction_centerline_ids is not None:
-        centerline_id_map[x, y, z] = direction_centerline_ids[nearest_idx]
-
-    return direction_map, distance_map, centerline_id_map
+    return framework_map_direction_to_material_voxels(image, direction_coords, direction_vectors, direction_centerline_ids)
 
 # Function to split centerlines at branch points
 def split_and_order_centerlines(graph, branch_nodes, steps=4):
-    """
-    Splits the graph's centerlines at branch points with improved handling of intersections.
-    Instead of removing the branch node itself, it looks at the connected branches and removes
-    (shifts) the voxel from the branch with the most deviated direction.
-    
-    Parameters:
-        graph (networkx.Graph): The input graph representing the skeleton.
-        branch_nodes (list): List of nodes where branches occur.
-        steps (int): How many voxels along the branch to consider for adjustment (default=1).
-        
-    Returns:
-        tuple: (split_centerlines, modified_graph)
-            - split_centerlines: a list of ordered centerline node lists.
-            - modified_graph: the graph after branch adjustment.
-    """
-    # Work on a copy so that the original graph is not modified
-    G = graph.copy()
-
-     # -------------------------------------------------
-    # If no branch nodes, no splitting needed
-    # Just order each connected component and return
-    # -------------------------------------------------
-    if branch_nodes is None or len(branch_nodes) == 0:
-        split_centerlines = []
-
-        for component in nx.connected_components(G):
-            subgraph = G.subgraph(component).copy()
-            ordered_centerline = order_component(subgraph)
-
-            if len(ordered_centerline) > 0:
-                split_centerlines.append(ordered_centerline)
-
-        return split_centerlines, G
-
-    # -------------------------------------------------
-    # Branch adjustment
-    # -------------------------------------------------
-
-    # For each branch node, adjust the intersection by removing the first voxel
-    # along the branch that deviates most from the others.
-    for branch in branch_nodes:
-        if branch not in G:
-            continue
-        neighbors = list(G.neighbors(branch))
-        if len(neighbors) <= 1:
-            # Not really an intersection if only one neighbor.
-            continue
-        
-        branch_vectors = {}
-        # For each connected branch from the branch node, compute a unit direction vector.
-        for n in neighbors:
-            # If possible, follow the branch "steps" voxels ahead.
-            current = n
-            prev = branch
-            for _ in range(steps - 1):
-                # Look for a neighbor that is not the previous node.
-                next_candidates = [nbr for nbr in G.neighbors(current) if nbr != prev]
-                if next_candidates:
-                    prev = current
-                    current = next_candidates[0]
-                else:
-                    break
-            # Compute vector from branch to the voxel 'current'
-            vec = np.array(current) - np.array(branch)
-            norm = np.linalg.norm(vec)
-            if norm != 0:
-                branch_vectors[n] = vec / norm
-        
-        if len(branch_vectors) < 2:
-            # Not enough branches to compare
-            continue
-        
-        # Compute total angular difference for each branch direction
-        differences = {}
-        for n1, v1 in branch_vectors.items():
-            total_angle = 0
-            for n2, v2 in branch_vectors.items():
-                if n1 == n2:
-                    continue
-                # Compute angle difference using dot product
-                dot = np.dot(v1, v2)
-                # Clip dot to avoid numerical issues
-                dot = np.clip(dot, -1, 1)
-                angle = np.arccos(dot)
-                total_angle += angle
-            differences[n1] = total_angle
-        
-        # Identify the neighbor whose branch has the maximum total angular difference.
-        branch_to_adjust = max(differences, key=differences.get)
-        
-        # Instead of removing the branch node, remove the neighbor on the branch that is most different.
-        if branch_to_adjust in G:
-            G.remove_node(branch_to_adjust)
-
-    for component in nx.connected_components(G):
-        subgraph = G.subgraph(component).copy()
-        ordered_centerline = order_component(subgraph)
-
-        if len(ordered_centerline) > 0:
-            split_centerlines.append(ordered_centerline)
-
-    return split_centerlines, G
+    return framework_split_and_order_centerlines(graph, branch_nodes, steps=steps)
 
 def order_component(subgraph):
-    component_nodes = list(subgraph.nodes())
-
-    if len(component_nodes) == 0:
-        return []
-
-    if len(component_nodes) == 1:
-        return component_nodes
-
-    # Find endpoints
-    endpoints = [node for node in component_nodes if subgraph.degree(node) == 1]
-
-    # If it is a simple path, start from an endpoint
-    if len(endpoints) >= 1:
-        start = endpoints[0]
-    else:
-        # Closed loop or no clear endpoint
-        start = component_nodes[0]
-
-    ordered_centerline = []
-    visited = set()
-    node = start
-
-    # Traverse from start node in order
-    node = start
-    while node is not None:
-        ordered_centerline.append(node)
-        visited.add(node)
-
-        # Move to next node
-        next_nodes = [n for n in subgraph._adj[node] if n not in visited]
-        node = next_nodes[0] if next_nodes else None  # Pick the next unvisited node
-    
-    return ordered_centerline
+    return framework_order_component(subgraph)
 
 
 def calculate_centerline_properties(split_centerlines,tifvoxelsize,image, plane='XY', step_size=4):
-    """
-    Calculates average azimuth, elevation, length, and distance to background 
-    for endpoints of each centerline.
-
-    Parameters:
-        split_centerlines (list of lists): Ordered centerlines, each a list of (x, y, z) tuples.
-        tifvoxelsize (float): Size of one voxel in real-world units.
-        image (ndarray): 3D image array where background is 0.
-        plane (str): Plane used for azimuth/elevation computation ('XY', 'XZ', 'YZ').
-
-    Returns:
-        list of dicts: Each dict contains avg_azimuth, avg_elevation, length, 
-                       first_point_distance, last_point_distance.
-    """
-    # Compute distance transform from background (0 == background)
-    dist_transform = distance_transform_edt(image > 0)
-    centerline_properties = []
-
-    # New arrays for mapping later
-    direction_coords = []
-    direction_vectors = []
-    direction_centerline_ids = []
-
-    for centerline_id, centerline in enumerate(split_centerlines):
-        vectors = []
-        length = 0.0
-        
-        # Compute direction vectors and segment lengths
-        for i in range(0, len(centerline) - step_size, step_size):
-            p1 = np.array(centerline[i])  
-            p2 = np.array(centerline[min(i + step_size, len(centerline) - 1)])
-            vec = p2 - p1  
-            vectors.append(vec)
-            length += np.linalg.norm(vec)*tifvoxelsize  # Sum Euclidean distances
-
-        if not vectors:
-            # centerline_properties.append([None, None, 0.0])
-            continue
-
-        vectors = np.array(vectors)
-        
-        # Compute mean direction vector
-        mean_vector = np.mean(vectors, axis=0)
-        norm = np.linalg.norm(mean_vector)
-
-        if norm == 0:
-            # centerline_properties.append([None, None, length])
-            continue
-
-        mean_vector_unit = mean_vector / norm
-
-        # Save this direction for every voxel in this centerline
-        for voxel in centerline:
-            direction_coords.append(voxel)
-            direction_vectors.append(mean_vector_unit)
-            direction_centerline_ids.append(centerline_id)
-
-        # Compute azimuth and elevation based on selected plane
-        if plane == 'XY':
-            avg_azimuth = np.arctan2(mean_vector[1], mean_vector[0])  # θ (rotation in XY)
-            avg_elevation = np.arcsin(mean_vector[2] / norm)  # φ (tilt in Z)
-        elif plane == 'XZ':
-            avg_azimuth = np.arctan2(mean_vector[2], mean_vector[0])  # θ (rotation in XZ)
-            avg_elevation = np.arcsin(mean_vector[1] / norm)  # φ (tilt in Y)
-        elif plane == 'YZ':
-            avg_azimuth = np.arctan2(mean_vector[2], mean_vector[1])  # θ (rotation in YZ)
-            avg_elevation = np.arcsin(mean_vector[0] / norm)  # φ (tilt in X)
-        else:
-            raise ValueError("Invalid plane option. Choose from 'XY', 'XZ', or 'YZ'.")
-        
-        # Get scaled distance to background for first and last points
-        first_point = tuple(np.round(centerline[0]).astype(int))
-        last_point = tuple(np.round(centerline[-1]).astype(int))
-
-        first_distance = dist_transform[first_point] * tifvoxelsize
-        last_distance = dist_transform[last_point] * tifvoxelsize
-        
-        length += first_distance + last_distance
-
-        centerline_properties.append([float(np.degrees(avg_azimuth)), float(np.degrees(avg_elevation)), float(length)])
-
-    return (
-        np.array(centerline_properties,dtype=float), 
-        np.array(direction_coords, dtype=int), 
-        np.array(direction_vectors, dtype=np.float32),
-        np.array(direction_centerline_ids, dtype=np.int32)
-        )
+    return framework_calculate_centerline_properties(split_centerlines, tifvoxelsize, image, plane=plane, step_size=step_size)
 
 # def writeProperties(savingOptions, propertyNames, propertiesList):
 
@@ -669,23 +360,7 @@ def calculate_centerline_properties(split_centerlines,tifvoxelsize,image, plane=
 #                 else str(x) for x in propertiesList) + '\n')  
     
 def writeProperties(savingOptions, propertyNames, propertiesList):
-    """
-    Write a single line of property values to file using JSON formatting 
-    for list-like values.
-    """
-    path = Path(savingOptions['property_path'])
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    header = '\t'.join(propertyNames) + '\n'
-    with open(path, "a+", encoding="utf-8") as f:
-        f.seek(0)
-        content = f.read()
-        if "StlName" not in content:
-            f.write(header)
-
-        formatted = [_format_value_json(x) for x in propertiesList]
-        line = '\t'.join(formatted) + '\n'
-        f.write(line)
+    write_legacy_property_row(savingOptions['property_path'], propertyNames, propertiesList)
 
 def _format_value_json(x):
     """

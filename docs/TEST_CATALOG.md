@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-50 passed
+52 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -200,6 +200,16 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Pass tolerance: output file exists, has exactly `6` columns, has one row per material voxel, and all values are finite.
 
 ## Properties
+
+`test_framework_legacy_property_row_matches_known_cube_schema`
+- Input: `cube_16.tif`
+- Checks: framework-level legacy property row construction preserves the current selected-property schema.
+- Pass tolerance: exact expected header, STL name exactly `cube`, closed volume `512 +/- 80`, and porosity `1 - 512 / 16^3 +/- 0.03`.
+
+`test_framework_legacy_property_writer_preserves_table_contract`
+- Input: `cube_16.tif`
+- Checks: framework-level legacy property writer emits the current tab-delimited table contract.
+- Pass tolerance: exact expected header, exactly one row, closed volume `512 +/- 80`, and porosity `1 - 512 / 16^3 +/- 0.03`.
 
 `test_fiber_diameter_for_known_cylinder_is_within_voxel_tolerance`
 - Input: `fiber_z_48.tif`
