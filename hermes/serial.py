@@ -151,6 +151,95 @@ def run_serial(
                 temp_number += 1
 
 
+def build_sample_tasks(cropping_flag, crop_settings, *, random_module=random):
+    """Build legacy-style sample tasks from crop settings."""
+    if cropping_flag == "Regular":
+        filenames, filevoxels, num_volumes, volume_length = crop_settings
+    elif cropping_flag == "Corners":
+        filenames, filevoxels, corners_mtx, volume_length = crop_settings
+    else:
+        raise ValueError(f"Unknown cropping flag: {cropping_flag}")
+
+    sample_counts = None
+    if cropping_flag == "Regular" and volume_length != 0 and num_volumes != 0:
+        sample_counts = np.zeros(len(filenames), dtype="int")
+        for _ in range(num_volumes):
+            selected_name = random_module.choice(filenames)
+            sample_counts[filenames.index(selected_name)] += 1
+
+    tasks = []
+    temp_number = 0
+    for surf in filenames:
+        file_index = filenames.index(surf)
+        image_volume = load_volume(surf)
+        voxel_lengths = image_volume.shape
+
+        if cropping_flag == "Regular":
+            if volume_length == 0:
+                tasks.append(
+                    {
+                        "surface_name": surf,
+                        "voxel_size": filevoxels[file_index],
+                        "temp_number": temp_number,
+                        "volume_length": "Full",
+                        "corner": np.zeros(3, dtype="int").tolist(),
+                    }
+                )
+                temp_number += 1
+            elif num_volumes == 0:
+                dim_x = int(voxel_lengths[0] * filevoxels[file_index] / volume_length)
+                dim_y = int(voxel_lengths[1] * filevoxels[file_index] / volume_length)
+                dim_z = int(voxel_lengths[2] * filevoxels[file_index] / volume_length)
+                block_size = int(volume_length / filevoxels[file_index])
+                corners = list(
+                    itertools.product(
+                        [index * block_size for index in range(dim_x)],
+                        [index * block_size for index in range(dim_y)],
+                        [index * block_size for index in range(dim_z)],
+                    )
+                )
+                for corner in corners:
+                    tasks.append(
+                        {
+                            "surface_name": surf,
+                            "voxel_size": filevoxels[file_index],
+                            "temp_number": temp_number,
+                            "volume_length": volume_length,
+                            "corner": list(corner),
+                        }
+                    )
+                    temp_number += 1
+            else:
+                for index in range(sample_counts[file_index]):
+                    seed = random_module.randint(0, 1000000) + index
+                    tasks.append(
+                        {
+                            "surface_name": surf,
+                            "voxel_size": filevoxels[file_index],
+                            "temp_number": temp_number,
+                            "volume_length": volume_length,
+                            "voxel_lengths": voxel_lengths,
+                            "seed": seed,
+                        }
+                    )
+                    temp_number += 1
+
+        elif cropping_flag == "Corners":
+            for corner in corners_mtx:
+                tasks.append(
+                    {
+                        "surface_name": surf,
+                        "voxel_size": filevoxels[file_index],
+                        "temp_number": temp_number,
+                        "volume_length": volume_length,
+                        "corner": list(corner),
+                    }
+                )
+                temp_number += 1
+
+    return tasks
+
+
 def process_random_sample(args):
     """Worker function for random-volume processing."""
     surf, filevoxel, temp_number, volume_length, voxel_lengths, seed, surface_settings, saving_options = args

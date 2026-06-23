@@ -22,9 +22,10 @@ For a complete feature-by-feature reference, see [docs/features.md](docs/feature
 ## Repository Status
 
 This repository is being prepared for public release alongside the HERMES manuscript.
-The current code provides a GUI workflow, a serial script workflow, and an MPI script workflow.
-The serial and MPI scripts are current entry points, but they are configured by editing Python variables rather than by command-line arguments or a config file.
-Characterization tests and public documentation are being added before the GUI, serial, and MPI paths are unified around one backend.
+The current code provides a GUI workflow, direct command-line commands, a JSON config runner, a Python API, and an MPI command for distributed processing.
+The serial workflow now runs through the package framework rather than edited root-level scripts.
+The remaining cleanup work is focused on expanding MPI config execution and making the GUI a visual front end to the same shared backend.
+Characterization tests and public documentation are being added as that consolidation continues.
 
 ## License
 

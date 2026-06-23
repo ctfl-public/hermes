@@ -16,7 +16,8 @@ mpirun -n 4 python -m hermes mpi --input segmented.tif --voxel-size 1.0 --output
 ```
 
 The current framework MPI command processes a single input volume through the shared `Workspace` path.
-The remaining MPI cleanup should expand this command to run full config workflows.
+The package MPI module also contains the framework runner for regular, grid-like, random, and explicit-corner sampling tasks.
+The remaining MPI cleanup should expose full config workflows through this command.
 
 ## SLURM Example
 
@@ -69,11 +70,9 @@ safe structures per node = available node memory / peak memory per structure
 
 The current MPI framework path is useful but should be expanded before a stable public release.
 
-- `voxel2stl_mpi.py` still contains substantial legacy code.
-- The tested MPI path now lives in `hermes.mpi` and is exposed through `python -m hermes mpi`.
+- The tested MPI path lives in `hermes.mpi` and is exposed through `python -m hermes mpi`.
+- Regular, grid-like, random, and explicit-corner sample task orchestration now lives in `hermes.mpi`.
 - Property writing should be made rank-safe by gathering rows before writing.
-- Full-volume behavior should be unified with the serial backend.
-- Scalar and three-axis volume-length behavior should be unified with the serial backend.
 - Full config execution should be added to `hermes.mpi`.
 
 The characterization tests include MPI contract tests that describe the desired future behavior.

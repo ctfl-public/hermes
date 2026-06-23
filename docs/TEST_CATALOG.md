@@ -260,6 +260,11 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Checks: two-rank MPI CLI run completes one volume and writes expected outputs.
 - Pass tolerance: return code `0`, stdout contains `Completed 1 volumes`, exactly one STL is written, and `properties.txt` exists.
 
+`test_mpi_framework_processes_corner_samples_with_serial_backend`
+- Input: `small_primary_0.tif`
+- Checks: the package MPI sample runner uses the shared serial backend for two explicit corner samples.
+- Pass tolerance: exactly two result messages are returned and exactly two TIFF outputs are written.
+
 ## Workspace Core
 
 `test_workspace_segments_known_grayscale_volume_and_extracts_subvolume`

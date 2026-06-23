@@ -80,4 +80,5 @@ It is intentionally small so it can run quickly on a laptop.
 
 The direct CLI commands and Python API are the intended replacement direction for basic non-GUI work.
 The config runner is the intended path for complete reproducible workflows.
-The GUI, legacy serial script, and MPI script are still available, but they have not yet all been consolidated around this interface.
+The GUI is still being consolidated around this interface.
+MPI execution is available through `python -m hermes mpi`, with full config-driven MPI execution still planned.

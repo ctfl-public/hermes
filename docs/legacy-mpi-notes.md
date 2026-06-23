@@ -19,5 +19,5 @@ For example, two nodes with 128 GB each provide 256 GB total, and the number of 
 ## Current Replacement
 
 The current framework MPI entry point is `python -m hermes mpi`.
-`voxel2stl_mpi.py` remains only as legacy provenance during cleanup.
+The old root-level MPI script has been removed after the tested behavior moved into `hermes.mpi`.
 The public MPI instructions are maintained in [mpi.md](mpi.md).

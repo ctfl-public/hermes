@@ -80,8 +80,8 @@ Internal helper names should not be needed for normal use.
 
 ## Legacy Script Workflows
 
-`voxel2stl_mpi.py` remains temporarily as a legacy MPI wrapper.
 The former serial script workflow now lives in the package framework and is exposed through the direct CLI, Python API, and config workflow.
+The former MPI script workflow now lives in `hermes.mpi` and is exposed through `python -m hermes mpi`.
 
 ## GUI Workflow
 
@@ -175,7 +175,7 @@ Output names encode the source file, sub-volume index, selected corner, volume l
 
 The GUI is the current interactive interface.
 The serial framework now runs through package commands and JSON configs.
-The MPI framework has a package command for the tested single-volume path, but the legacy MPI script still contains older orchestration that should be folded into `hermes.mpi`.
+The MPI framework has a package command for the tested single-volume path and package-level orchestration for sampled volumes.
 The cleanup work should keep replacing edited-in settings with a shared backend and a stable config or CLI interface.
 
 ## Directional Porosity Utilities

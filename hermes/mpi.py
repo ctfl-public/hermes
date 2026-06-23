@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from hermes import Workspace
+from hermes.serial import build_sample_tasks, process_random_sample, process_sample, _prepare_property_file
 
 
 def run_mpi_cli(argv=None, *, comm=None) -> int:
@@ -42,6 +43,74 @@ def run_single_volume_mpi(input_path: str, voxel_size: float, output_dir: str, *
         results = [item for sublist in all_results for item in sublist]
         print(f"Completed {len(results)} volumes", flush=True)
     return 0
+
+
+def run_sample_mpi(cropping_flag, crop_settings, surface_settings, saving_options, *, comm=None) -> list[str] | None:
+    """Distribute legacy-style sample tasks over an MPI communicator."""
+    if comm is None:
+        from mpi4py import MPI
+
+        comm = MPI.COMM_WORLD
+
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+
+    if rank == 0 and saving_options.get("property_save"):
+        _prepare_property_file(saving_options)
+
+    saving_options = comm.bcast(saving_options, root=0)
+
+    if rank == 0:
+        tasks = build_sample_tasks(cropping_flag, crop_settings)
+        print(f"Total tasks to distribute: {len(tasks)}", flush=True)
+    else:
+        tasks = []
+
+    tasks = comm.bcast(tasks, root=0)
+    local_tasks = np.array_split(tasks, size)[rank]
+    print(f"Rank {rank}: Processing {len(local_tasks)} tasks", flush=True)
+
+    local_results = []
+    for task in local_tasks:
+        result = process_sample_task(task, surface_settings, saving_options)
+        local_results.append(result)
+        print(f"Rank {rank}: {result}", flush=True)
+
+    all_results = comm.gather(local_results, root=0)
+    if rank == 0:
+        results = [item for sublist in all_results for item in sublist]
+        print(f"Completed {len(results)} volumes", flush=True)
+        return results
+
+    return None
+
+
+def process_sample_task(task: dict, surface_settings: dict, saving_options: dict) -> str:
+    """Process one distributed sample task using the serial framework."""
+    if "seed" in task:
+        return process_random_sample(
+            (
+                task["surface_name"],
+                task["voxel_size"],
+                task["temp_number"],
+                task["volume_length"],
+                task["voxel_lengths"],
+                task["seed"],
+                surface_settings,
+                saving_options,
+            )
+        )
+
+    result = process_sample(
+        task["surface_name"],
+        task["voxel_size"],
+        task["temp_number"],
+        task["volume_length"],
+        np.asarray(task["corner"], dtype="int"),
+        surface_settings,
+        saving_options,
+    )
+    return result or f"Processed corner {task['temp_number']} of {task['surface_name']}"
 
 
 def process_single_volume_task(task: dict) -> str:
