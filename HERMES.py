@@ -43,6 +43,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector
 import pyvista as pv
 from pyvistaqt import BackgroundPlotter, QtInteractor
+from hermes.serial import run_serial
 from hermes.segmentation import segment_greyscale
 
 class VoxelRenderingWindow(QDialog):
@@ -1229,7 +1230,7 @@ class UI(QMainWindow):
         # Close the UI window
         self.close()
         
-        voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions)
+        run_serial(croppingFlag, cropSettings, surfaceSettings, savingOptions)
         
         
     def show_error_message(self, title, message):

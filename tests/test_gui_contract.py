@@ -42,13 +42,13 @@ def test_gui_run_pipeline_builds_expected_serial_call(monkeypatch, tmp_path, fix
 
     captured = {}
 
-    def fake_voxel2stl(cropping_flag, crop_settings, surface_settings, saving_options):
+    def fake_run_serial(cropping_flag, crop_settings, surface_settings, saving_options):
         captured["cropping_flag"] = cropping_flag
         captured["crop_settings"] = crop_settings
         captured["surface_settings"] = surface_settings
         captured["saving_options"] = saving_options
 
-    monkeypatch.setattr(HERMES, "voxel2stl", fake_voxel2stl)
+    monkeypatch.setattr(HERMES, "run_serial", fake_run_serial)
 
     app = QApplication.instance() or QApplication([])
     ui = UI()
