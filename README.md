@@ -106,14 +106,14 @@ The GUI supports input selection, voxel-size assignment, segmentation, threshold
 
 ### Serial Workflow
 
-Edit the settings in `run_voxel2stl()` and then run the serial script.
+Use direct CLI commands for basic serial tasks or a JSON config for reproducible multi-step workflows.
 
 ```bash
-python voxel2stl.py
+python -m hermes mesh segmented.tif mesh.stl --voxel-size 1.0
+python -m hermes run examples/quickstart/config.json
 ```
 
-The current serial script does not yet provide a command-line interface or config-file interface.
-See [docs/usage.md](docs/usage.md) for the current settings model and output formats.
+See [docs/usage.md](docs/usage.md) for command and config details.
 
 ### MPI Workflow
 

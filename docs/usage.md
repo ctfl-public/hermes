@@ -69,9 +69,9 @@ Internal helper names should not be needed for normal use.
 
 ## Legacy Script Workflows
 
-`voxel2stl.py` and `voxel2stl_mpi.py` remain available during cleanup.
-They still contain legacy edit-in-source settings.
-The new direct CLI, Python API, and config runner are the intended replacement direction.
+`voxel2stl.py` remains temporarily as a deprecated compatibility wrapper.
+`voxel2stl_mpi.py` remains available during cleanup and still contains legacy edit-in-source settings.
+The new direct CLI, Python API, and config workflow are the intended replacement direction.
 
 ## GUI Workflow
 
@@ -107,27 +107,10 @@ The segmentation tab operates on grayscale TIFF volumes.
 
 The segmented TIFF can then be used as input for mesh generation and property extraction.
 
-## Serial Script Workflow
+## Serial Workflow
 
-<!-- TODO: Add a minimal annotated `run_voxel2stl()` configuration using a tiny included TIFF fixture. -->
-
-Edit the settings in `run_voxel2stl()` and then run the serial script.
-
-```bash
-python voxel2stl.py
-```
-
-The current script is configured by editing values in `run_voxel2stl()`.
-The defaults in the current code are examples and should be replaced with local input paths, voxel sizes, save paths, sampling options, and property options before running.
-The most important settings are listed below.
-
-- `surfaceSettings` controls Laplacian smoothing, screened Poisson reconstruction, and island removal.
-- `croppingFlag` selects `Regular` or `Corners`.
-- `filenames` lists input TIFF or DAT files.
-- `filevoxels` lists voxel sizes for each input.
-- `savingOptions` controls TIFF, DAT, STL, and property outputs.
-- `property_options` selects the computed properties.
-- `cropSettings` controls volume length, sample count, or explicit corners.
+Use direct CLI commands or a JSON config file for serial work.
+Do not edit `voxel2stl.py` for new workflows.
 
 ## Sampling Modes
 
