@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-67 passed
+69 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -53,10 +53,10 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Checks: the GUI Run button builds and launches a framework workflow config from table entries, sampling controls, save controls, smoothing controls, and property controls.
 - Pass tolerance: input path and voxel size preserved exactly, sampling config exactly `{"mode": "grid", "volume_length": 8}`, outputs exactly `["tiff"]`, properties exactly `["surface_area"]`, and Laplacian smoothing enabled with `2` iterations.
 
-`test_gui_run_pipeline_falls_back_to_serial_for_multi_input`
+`test_gui_run_pipeline_builds_workflow_config_for_multi_input`
 - Inputs: `HERMESGUI.ui`, `small_primary_0.tif`, and `small_primary_1.tif`
-- Checks: GUI Run falls back to the serial backend for multi-input workflows that the shared config runner does not yet represent.
-- Pass tolerance: crop mode exactly `Regular`, both input filenames and voxel sizes preserved exactly, requested volume count exactly `2`, and volume length exactly `12`.
+- Checks: GUI Run builds and launches a framework workflow config for multi-input workflows.
+- Pass tolerance: both input filenames and voxel sizes preserved exactly, sampling config exactly `{"mode": "random", "volume_length": 12, "count": 2}`, and outputs exactly `["tiff"]`.
 
 `test_gui_adapter_builds_regular_serial_arguments`
 - Input: `cube_16.tif` plus representative GUI field values
@@ -87,6 +87,11 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: `cube_16.tif` plus GUI output selections using separate TIFF, DAT, STL, and property paths.
 - Checks: pure GUI adapter exports explicit framework output paths instead of requiring one shared output root.
 - Pass tolerance: exact output paths for `tiff`, `dat`, `stl`, and `properties`.
+
+`test_gui_adapter_exports_multi_input_workflow_config`
+- Inputs: `small_primary_0.tif` and `small_primary_1.tif` plus regular-sampling GUI field values.
+- Checks: pure GUI adapter exports a framework `inputs` list for multi-input workflows.
+- Pass tolerance: exact input paths, voxel sizes `1.0` and `2.0`, no single `input` block, and sampling config exactly `{"mode": "grid", "volume_length": 12}`.
 
 `test_gui_adapter_exports_corner_workflow_config`
 - Input: `cube_16.tif` plus two explicit GUI corner rows and shared output paths
@@ -203,6 +208,11 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: JSON config with GUI-style separate output paths for TIFF, DAT, STL, and property files.
 - Checks: config-driven workflow writes each selected output to the explicit GUI-style location.
 - Pass tolerance: TIFF, DAT, STL, and property files all exist at the requested paths, and the returned TIFF path is exact.
+
+`test_config_runner_processes_multi_input_workflow`
+- Input: JSON config with two generated binary input volumes.
+- Checks: config-driven workflow processes each input and appends both property rows into one property table.
+- Pass tolerance: exact resolved input paths, exactly `2` per-input results, TIFF outputs for `multi_a` and `multi_b` exist, and the property table has one header plus two rows.
 
 `test_sampling_helpers_make_deterministic_grid_and_seeded_random_specs`
 - Input: synthetic `(24, 24, 24)` volume dimensions.

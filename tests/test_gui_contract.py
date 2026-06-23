@@ -79,7 +79,7 @@ def test_gui_run_pipeline_builds_expected_workflow_config(monkeypatch, tmp_path,
         ui.close()
 
 
-def test_gui_run_pipeline_falls_back_to_serial_for_multi_input(monkeypatch, tmp_path, fixture_dir, qtbot=None):
+def test_gui_run_pipeline_builds_workflow_config_for_multi_input(monkeypatch, tmp_path, fixture_dir, qtbot=None):
     pytest.importorskip("PyQt5")
     pytest.importorskip("pyvista")
     pytest.importorskip("pyvistaqt")
@@ -89,15 +89,10 @@ def test_gui_run_pipeline_falls_back_to_serial_for_multi_input(monkeypatch, tmp_
 
     captured = {}
 
-    def fake_run_serial(cropping_flag, crop_settings, surface_settings, saving_options):
-        captured["cropping_flag"] = cropping_flag
-        captured["crop_settings"] = crop_settings
+    def fake_run_workflow_config(config):
+        captured["config"] = config
 
-    def fail_run_workflow_config(config):
-        raise AssertionError("workflow config should not be used for multi-input GUI runs")
-
-    monkeypatch.setattr(HERMES, "run_serial", fake_run_serial)
-    monkeypatch.setattr(HERMES, "run_workflow_config", fail_run_workflow_config)
+    monkeypatch.setattr(HERMES, "run_workflow_config", fake_run_workflow_config)
 
     app = QApplication.instance() or QApplication([])
     ui = UI()
@@ -115,15 +110,18 @@ def test_gui_run_pipeline_falls_back_to_serial_for_multi_input(monkeypatch, tmp_
 
         ui.run_voxel2stl()
 
-        assert captured["cropping_flag"] == "Regular"
-        filenames, filevoxels, num_volumes, volume_length = captured["crop_settings"]
-        assert filenames == [
-            str(fixture_dir / "small_primary_0.tif"),
-            str(fixture_dir / "small_primary_1.tif"),
+        assert captured["config"]["inputs"] == [
+            {
+                "path": str(fixture_dir / "small_primary_0.tif"),
+                "voxel_size": 1.0,
+            },
+            {
+                "path": str(fixture_dir / "small_primary_1.tif"),
+                "voxel_size": 1.0,
+            },
         ]
-        assert filevoxels == [1.0, 1.0]
-        assert num_volumes == 2
-        assert volume_length == 12
+        assert captured["config"]["sampling"] == {"mode": "random", "volume_length": 12, "count": 2}
+        assert captured["config"]["outputs"] == ["tiff"]
     finally:
         ui.close()
 

@@ -32,6 +32,7 @@ def run_volume(
     output_paths: dict[str, str] | None = None,
     pad: bool = True,
     crop: dict[str, object] | None = None,
+    append_properties: bool = False,
 ) -> dict[str, object]:
     """Run a compact volume-to-properties workflow without editing source files."""
     input_path = Path(input_path)
@@ -56,7 +57,7 @@ def run_volume(
         surface_settings=surface_settings,
         output_paths=output_paths,
         pad=pad,
-        append_properties=False,
+        append_properties=append_properties,
     )
 
 
@@ -160,11 +161,50 @@ def run_config(config_path: str | Path) -> dict[str, object]:
 def run_workflow_config(config: dict[str, object], *, base_dir: str | Path = ".") -> dict[str, object]:
     """Run a HERMES workflow from an in-memory config dictionary."""
     base_dir = Path(base_dir)
-    input_config = config["input"]
-    input_path = _resolve_path(input_config["path"], base_dir)
     output_dir = _resolve_path(config.get("output_dir", "."), base_dir)
     output_paths = _resolve_output_paths(config.get("output_paths", {}), base_dir)
+    input_configs = _input_configs(config)
 
+    if len(input_configs) > 1:
+        results = []
+        property_rows_written = 0
+        for input_config in input_configs:
+            result = _run_input_config(
+                input_config,
+                config,
+                base_dir=base_dir,
+                output_dir=output_dir,
+                output_paths=output_paths,
+                append_first_properties=property_rows_written > 0,
+            )
+            property_rows_written += _property_result_count(result, config.get("outputs", DEFAULT_OUTPUTS))
+            results.append(result)
+        return {
+            "inputs": [str(_resolve_path(input_config["path"], base_dir)) for input_config in input_configs],
+            "output_dir": str(output_dir),
+            "results": results,
+        }
+
+    return _run_input_config(
+        input_configs[0],
+        config,
+        base_dir=base_dir,
+        output_dir=output_dir,
+        output_paths=output_paths,
+        append_first_properties=False,
+    )
+
+
+def _run_input_config(
+    input_config: dict[str, object],
+    config: dict[str, object],
+    *,
+    base_dir: Path,
+    output_dir: Path,
+    output_paths: dict[str, str],
+    append_first_properties: bool,
+) -> dict[str, object]:
+    input_path = _resolve_path(input_config["path"], base_dir)
     if "generate" in input_config:
         _write_generated_volume(input_path, input_config["generate"])
 
@@ -172,7 +212,7 @@ def run_workflow_config(config: dict[str, object], *, base_dir: str | Path = "."
         voxel_size = float(input_config.get("voxel_size", 1.0))
         source = Workspace.from_file(input_path, voxel_size=voxel_size)
         source.matrix = (source.matrix > 0).astype(np.uint8)
-        base_name = config.get("name", Path(input_path).stem)
+        base_name = input_config.get("name", config.get("name", Path(input_path).stem))
         results = []
         specs = specs_from_config(config["sampling"], source.matrix.shape, voxel_size)
         for index, spec in enumerate(specs):
@@ -191,7 +231,7 @@ def run_workflow_config(config: dict[str, object], *, base_dir: str | Path = "."
                     surface_settings=config.get("surface_settings"),
                     output_paths=output_paths,
                     pad=bool(config.get("pad", True)),
-                    append_properties=index > 0,
+                    append_properties=append_first_properties or index > 0,
                 )
             )
         return {"input": str(input_path), "output_dir": str(output_dir), "samples": results}
@@ -200,7 +240,7 @@ def run_workflow_config(config: dict[str, object], *, base_dir: str | Path = "."
         input_path,
         float(input_config.get("voxel_size", 1.0)),
         output_dir,
-        name=config.get("name"),
+        name=input_config.get("name", config.get("name", Path(input_path).stem)),
         outputs=config.get("outputs", DEFAULT_OUTPUTS),
         properties=config.get("properties", DEFAULT_PROPERTIES),
         property_options=config.get("property_options"),
@@ -208,6 +248,7 @@ def run_workflow_config(config: dict[str, object], *, base_dir: str | Path = "."
         output_paths=output_paths,
         pad=bool(config.get("pad", True)),
         crop=config.get("crop"),
+        append_properties=append_first_properties,
     )
 
 
@@ -216,6 +257,20 @@ def _unwrap_workflow_config(config: dict[str, object]) -> dict[str, object]:
     if "workflowConfig" in config:
         return config["workflowConfig"]
     return config
+
+
+def _input_configs(config: dict[str, object]) -> list[dict[str, object]]:
+    if "inputs" in config:
+        return list(config["inputs"])
+    return [config["input"]]
+
+
+def _property_result_count(result: dict[str, object], outputs: Iterable[str]) -> int:
+    if "properties" not in set(outputs):
+        return 0
+    if "samples" in result:
+        return len(result["samples"])
+    return 1
 
 
 def _default_surface_settings() -> dict[str, object]:

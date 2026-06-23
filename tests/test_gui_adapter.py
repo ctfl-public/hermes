@@ -198,6 +198,35 @@ def test_gui_adapter_exports_separate_output_paths(fixture_dir, tmp_path):
     }
 
 
+def test_gui_adapter_exports_multi_input_workflow_config(fixture_dir, tmp_path):
+    state = base_gui_state(
+        fixture_dir,
+        tmp_path,
+        input_rows=[
+            (str(fixture_dir / "small_primary_0.tif"), "1.0"),
+            (str(fixture_dir / "small_primary_1.tif"), "2.0"),
+        ],
+        regular_volume_length="12",
+        regular_num_volumes="0",
+        tiff_path=str(tmp_path / "images"),
+    )
+
+    config = build_workflow_config(state)
+
+    assert "input" not in config
+    assert config["inputs"] == [
+        {
+            "path": str(fixture_dir / "small_primary_0.tif"),
+            "voxel_size": 1.0,
+        },
+        {
+            "path": str(fixture_dir / "small_primary_1.tif"),
+            "voxel_size": 2.0,
+        },
+    ]
+    assert config["sampling"] == {"mode": "grid", "volume_length": 12}
+
+
 def test_gui_adapter_exports_advanced_property_config(fixture_dir, tmp_path):
     state = base_gui_state(
         fixture_dir,

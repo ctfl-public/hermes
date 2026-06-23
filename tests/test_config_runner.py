@@ -274,3 +274,46 @@ def test_config_runner_writes_gui_style_separate_output_paths(tmp_path):
     assert (tmp_path / "meshes" / "path_cube.stl").exists()
     assert (tmp_path / "tables" / "path_properties.txt").exists()
     assert result["written"]["tiff"] == str(tmp_path / "images" / "path_cube.tif")
+
+
+def test_config_runner_processes_multi_input_workflow(tmp_path):
+    config_path = tmp_path / "multi_input_config.json"
+    config = {
+        "inputs": [
+            {
+                "path": "input/multi_a.tif",
+                "voxel_size": 1.0,
+                "generate": {
+                    "kind": "binary_cube",
+                    "shape": [16, 16, 16],
+                    "bounds": [[4, 12], [4, 12], [4, 12]],
+                },
+            },
+            {
+                "path": "input/multi_b.tif",
+                "voxel_size": 1.0,
+                "generate": {
+                    "kind": "binary_cube",
+                    "shape": [16, 16, 16],
+                    "bounds": [[2, 10], [2, 10], [2, 10]],
+                },
+            },
+        ],
+        "output_dir": "multi_output",
+        "outputs": ["tiff", "properties"],
+        "properties": ["porosity"],
+    }
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+    result = run_config(config_path)
+
+    output = tmp_path / "multi_output"
+    property_lines = (output / "properties.txt").read_text(encoding="utf-8").strip().splitlines()
+    assert result["inputs"] == [
+        str(tmp_path / "input" / "multi_a.tif"),
+        str(tmp_path / "input" / "multi_b.tif"),
+    ]
+    assert len(result["results"]) == 2
+    assert (output / "tiff" / "multi_a.tif").exists()
+    assert (output / "tiff" / "multi_b.tif").exists()
+    assert len(property_lines) == 3

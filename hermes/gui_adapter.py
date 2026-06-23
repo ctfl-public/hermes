@@ -33,17 +33,10 @@ def build_serial_run_arguments(state: dict):
 def build_workflow_config(state: dict) -> dict:
     """Build a shared workflow config from GUI state when the config model supports it."""
     filenames, filevoxels = _parse_input_rows(state["input_rows"])
-    if len(filenames) != 1:
-        raise GuiAdapterError("Config export currently supports one input volume at a time.")
 
     _, _, _, saving_options = build_serial_run_arguments(state)
     output_dir = _config_output_dir(saving_options)
     config = {
-        "name": Path(filenames[0]).stem,
-        "input": {
-            "path": filenames[0],
-            "voxel_size": filevoxels[0],
-        },
         "output_dir": output_dir,
         "output_paths": _config_output_paths(saving_options),
         "outputs": _config_outputs(saving_options),
@@ -51,6 +44,20 @@ def build_workflow_config(state: dict) -> dict:
         "property_options": _config_property_options(saving_options["property_options"]),
         "surface_settings": _surface_settings(state),
     }
+    if len(filenames) == 1:
+        config["name"] = Path(filenames[0]).stem
+        config["input"] = {
+            "path": filenames[0],
+            "voxel_size": filevoxels[0],
+        }
+    else:
+        config["inputs"] = [
+            {
+                "path": filename,
+                "voxel_size": voxel_size,
+            }
+            for filename, voxel_size in zip(filenames, filevoxels)
+        ]
 
     sampling = _config_sampling(state, filevoxels[0])
     if sampling is not None:
