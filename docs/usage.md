@@ -80,9 +80,8 @@ Internal helper names should not be needed for normal use.
 
 ## Legacy Script Workflows
 
-`voxel2stl.py` remains temporarily as a deprecated compatibility wrapper.
 `voxel2stl_mpi.py` remains temporarily as a legacy MPI wrapper.
-The new direct CLI, Python API, and config workflow are the intended replacement direction.
+The former serial script workflow now lives in the package framework and is exposed through the direct CLI, Python API, and config workflow.
 
 ## GUI Workflow
 
@@ -121,7 +120,7 @@ The segmented TIFF can then be used as input for mesh generation and property ex
 ## Serial Workflow
 
 Use direct CLI commands or a JSON config file for serial work.
-Do not edit `voxel2stl.py` for new workflows.
+Do not edit source files for new workflows.
 
 ## Sampling Modes
 
@@ -175,19 +174,15 @@ Output names encode the source file, sub-volume index, selected corner, volume l
 ## Current Interface Limits
 
 The GUI is the current interactive interface.
-The serial and MPI scripts are current script entry points, but they are configured by editing Python variables rather than command-line arguments.
-The cleanup work should replace edited-in settings with a shared backend and a stable config or CLI interface.
+The serial framework now runs through package commands and JSON configs.
+The MPI framework has a package command for the tested single-volume path, but the legacy MPI script still contains older orchestration that should be folded into `hermes.mpi`.
+The cleanup work should keep replacing edited-in settings with a shared backend and a stable config or CLI interface.
 
 ## Directional Porosity Utilities
 
-<!-- TODO: Update this section after hard-coded analysis paths are separated from reusable directional porosity functions. -->
-
-`directionPorosityPlotting.py` contains helper functions for directional porosity analysis.
-It can load TIFF or DAT data.
-It can compute 1D porosity profiles in `x`, `y`, or `z`.
-It can save porosity data.
-It can plot porosity profiles.
-It can generate 3D blockwise porosity maps.
-
-The current file includes paper-specific analysis code at module level.
-The cleanup should separate reusable functions from hard-coded analysis paths.
+Reusable directional porosity functions now live in `hermes.directional_porosity`.
+They can load TIFF or DAT data.
+They can compute 1D porosity profiles in `x`, `y`, or `z`.
+They can save porosity data.
+They can plot porosity profiles.
+They can generate 3D blockwise porosity maps.
