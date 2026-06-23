@@ -240,3 +240,37 @@ def test_config_runner_applies_gui_surface_settings(tmp_path):
 
     assert result["name"] == "smooth_cube_laplacian2"
     assert (tmp_path / "smooth_output" / "stl" / "smooth_cube_laplacian2.stl").exists()
+
+
+def test_config_runner_writes_gui_style_separate_output_paths(tmp_path):
+    config_path = tmp_path / "separate_paths_config.json"
+    config = {
+        "name": "path_cube",
+        "input": {
+            "path": "input/path_cube.tif",
+            "voxel_size": 1.0,
+            "generate": {
+                "kind": "binary_cube",
+                "shape": [16, 16, 16],
+                "bounds": [[4, 12], [4, 12], [4, 12]],
+            },
+        },
+        "output_dir": "unused_default_output",
+        "output_paths": {
+            "tiff": "images",
+            "dat": "voxel-data",
+            "stl": "meshes",
+            "properties": "tables/path_properties.txt",
+        },
+        "outputs": ["tiff", "dat", "stl", "properties"],
+        "properties": ["surface_area", "porosity"],
+    }
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+    result = run_config(config_path)
+
+    assert (tmp_path / "images" / "path_cube.tif").exists()
+    assert (tmp_path / "voxel-data" / "path_cube.dat").exists()
+    assert (tmp_path / "meshes" / "path_cube.stl").exists()
+    assert (tmp_path / "tables" / "path_properties.txt").exists()
+    assert result["written"]["tiff"] == str(tmp_path / "images" / "path_cube.tif")

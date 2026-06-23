@@ -45,6 +45,7 @@ def build_workflow_config(state: dict) -> dict:
             "voxel_size": filevoxels[0],
         },
         "output_dir": output_dir,
+        "output_paths": _config_output_paths(saving_options),
         "outputs": _config_outputs(saving_options),
         "properties": _config_properties(saving_options["property_options"]),
         "property_options": _config_property_options(saving_options["property_options"]),
@@ -247,12 +248,20 @@ def _config_output_dir(saving_options):
         return "."
 
     first = resolved_roots[0]
-    if any(root != first for root in resolved_roots[1:]):
-        raise GuiAdapterError(
-            "Config export requires selected output paths to share one output folder. "
-            "Use subfolders named tiff, stl, or voxels under the same folder."
-        )
     return str(first)
+
+
+def _config_output_paths(saving_options):
+    output_paths = {}
+    if saving_options["tiff_save"] and saving_options["tiff_path"] not in (None, ""):
+        output_paths["tiff"] = saving_options["tiff_path"]
+    if saving_options["voxel_save"] and saving_options["voxel_path"] not in (None, ""):
+        output_paths["dat"] = saving_options["voxel_path"]
+    if saving_options["stl_save"] and saving_options["stl_path"] not in (None, ""):
+        output_paths["stl"] = saving_options["stl_path"]
+    if saving_options["property_save"] and saving_options["property_path"] not in (None, ""):
+        output_paths["properties"] = saving_options["property_path"]
+    return output_paths
 
 
 def _infer_output_root(path, conventional_names):

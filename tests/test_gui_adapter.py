@@ -133,6 +133,10 @@ def test_gui_adapter_exports_regular_workflow_config(fixture_dir, tmp_path):
             "voxel_size": 1.0,
         },
         "output_dir": str(tmp_path / "output"),
+        "output_paths": {
+            "tiff": str(tmp_path / "output" / "tiff"),
+            "properties": str(tmp_path / "output" / "properties.txt"),
+        },
         "outputs": ["tiff", "properties"],
         "properties": ["surface_area", "porosity"],
         "property_options": {
@@ -170,6 +174,28 @@ def test_gui_adapter_exports_corner_workflow_config(fixture_dir, tmp_path):
         "size": 12,
     }
     assert config["output_dir"] == str(tmp_path / "output")
+
+
+def test_gui_adapter_exports_separate_output_paths(fixture_dir, tmp_path):
+    state = base_gui_state(
+        fixture_dir,
+        tmp_path,
+        tiff_path=str(tmp_path / "images"),
+        voxel_save=True,
+        voxel_path=str(tmp_path / "voxel-data"),
+        stl_save=True,
+        stl_path=str(tmp_path / "meshes"),
+        property_path=str(tmp_path / "tables" / "props.txt"),
+    )
+
+    config = build_workflow_config(state)
+
+    assert config["output_paths"] == {
+        "tiff": str(tmp_path / "images"),
+        "dat": str(tmp_path / "voxel-data"),
+        "stl": str(tmp_path / "meshes"),
+        "properties": str(tmp_path / "tables" / "props.txt"),
+    }
 
 
 def test_gui_adapter_exports_advanced_property_config(fixture_dir, tmp_path):

@@ -29,6 +29,7 @@ def run_volume(
     properties: Iterable[str] = DEFAULT_PROPERTIES,
     property_options: dict[str, object] | None = None,
     surface_settings: dict[str, object] | None = None,
+    output_paths: dict[str, str] | None = None,
     pad: bool = True,
     crop: dict[str, object] | None = None,
 ) -> dict[str, object]:
@@ -53,6 +54,7 @@ def run_volume(
         properties=properties,
         property_options=property_options,
         surface_settings=surface_settings,
+        output_paths=output_paths,
         pad=pad,
         append_properties=False,
     )
@@ -66,6 +68,7 @@ def run_workspace(
     properties: Iterable[str] = DEFAULT_PROPERTIES,
     property_options: dict[str, object] | None = None,
     surface_settings: dict[str, object] | None = None,
+    output_paths: dict[str, str] | None = None,
     pad: bool = True,
     append_properties: bool = False,
 ) -> dict[str, object]:
@@ -76,6 +79,7 @@ def run_workspace(
     property_set = set(properties)
     property_options = property_options or {}
     surface_settings = surface_settings or _default_surface_settings()
+    output_paths = output_paths or {}
 
     if pad:
         workspace.pad()
@@ -116,19 +120,22 @@ def run_workspace(
 
     written: dict[str, str] = {}
     if "stl" in output_set:
-        stl_path = output_dir / "stl" / f"{workspace.name}.stl"
+        stl_dir = Path(output_paths.get("stl", output_dir / "stl"))
+        stl_path = stl_dir / f"{workspace.name}.stl"
         workspace.export_stl(stl_path)
         written["stl"] = str(stl_path)
     if "dat" in output_set:
-        dat_path = output_dir / "voxels" / f"{workspace.name}.dat"
+        dat_dir = Path(output_paths.get("dat", output_dir / "voxels"))
+        dat_path = dat_dir / f"{workspace.name}.dat"
         workspace.save_voxel_data(dat_path)
         written["dat"] = str(dat_path)
     if "tiff" in output_set:
-        tiff_path = output_dir / "tiff" / f"{workspace.name}.tif"
+        tiff_dir = Path(output_paths.get("tiff", output_dir / "tiff"))
+        tiff_path = tiff_dir / f"{workspace.name}.tif"
         write_tiff_volume(tiff_path, workspace._unpadded_matrix().astype(np.uint8))
         written["tiff"] = str(tiff_path)
     if "properties" in output_set:
-        properties_path = output_dir / "properties.txt"
+        properties_path = Path(output_paths.get("properties", output_dir / "properties.txt"))
         workspace.save_properties(properties_path, append=append_properties)
         written["properties"] = str(properties_path)
 
@@ -155,7 +162,8 @@ def run_workflow_config(config: dict[str, object], *, base_dir: str | Path = "."
     base_dir = Path(base_dir)
     input_config = config["input"]
     input_path = _resolve_path(input_config["path"], base_dir)
-    output_dir = _resolve_path(config["output_dir"], base_dir)
+    output_dir = _resolve_path(config.get("output_dir", "."), base_dir)
+    output_paths = _resolve_output_paths(config.get("output_paths", {}), base_dir)
 
     if "generate" in input_config:
         _write_generated_volume(input_path, input_config["generate"])
@@ -181,6 +189,7 @@ def run_workflow_config(config: dict[str, object], *, base_dir: str | Path = "."
                     properties=config.get("properties", DEFAULT_PROPERTIES),
                     property_options=config.get("property_options"),
                     surface_settings=config.get("surface_settings"),
+                    output_paths=output_paths,
                     pad=bool(config.get("pad", True)),
                     append_properties=index > 0,
                 )
@@ -196,6 +205,7 @@ def run_workflow_config(config: dict[str, object], *, base_dir: str | Path = "."
         properties=config.get("properties", DEFAULT_PROPERTIES),
         property_options=config.get("property_options"),
         surface_settings=config.get("surface_settings"),
+        output_paths=output_paths,
         pad=bool(config.get("pad", True)),
         crop=config.get("crop"),
     )
@@ -231,6 +241,10 @@ def _resolve_path(path: str | Path, base_dir: Path) -> Path:
     if path.is_absolute():
         return path
     return base_dir / path
+
+
+def _resolve_output_paths(output_paths: dict[str, str], base_dir: Path) -> dict[str, str]:
+    return {key: str(_resolve_path(path, base_dir)) for key, path in output_paths.items()}
 
 
 def _write_generated_volume(path: Path, generate_config: dict[str, object]) -> None:

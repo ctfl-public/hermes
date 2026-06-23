@@ -14,7 +14,7 @@ python -m pytest
 The expected result for this draft is:
 
 ```text
-65 passed
+67 passed
 ```
 
 ## Test Philosophy

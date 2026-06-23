@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-65 passed
+67 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -81,7 +81,12 @@ The MPI test may need permission for `mpirun` to open local communication socket
 `test_gui_adapter_exports_regular_workflow_config`
 - Input: `cube_16.tif` plus regular-sampling GUI field values and shared output paths
 - Checks: pure GUI adapter exports a framework config for a regular grid-style workflow.
-- Pass tolerance: exact input path, voxel size `1.0`, output root, outputs `["tiff", "properties"]`, properties `["surface_area", "porosity"]`, and sampling config `{"mode": "grid", "volume_length": 8}`.
+- Pass tolerance: exact input path, voxel size `1.0`, output root, output paths for TIFF and properties, outputs `["tiff", "properties"]`, properties `["surface_area", "porosity"]`, and sampling config `{"mode": "grid", "volume_length": 8}`.
+
+`test_gui_adapter_exports_separate_output_paths`
+- Input: `cube_16.tif` plus GUI output selections using separate TIFF, DAT, STL, and property paths.
+- Checks: pure GUI adapter exports explicit framework output paths instead of requiring one shared output root.
+- Pass tolerance: exact output paths for `tiff`, `dat`, `stl`, and `properties`.
 
 `test_gui_adapter_exports_corner_workflow_config`
 - Input: `cube_16.tif` plus two explicit GUI corner rows and shared output paths
@@ -193,6 +198,11 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: JSON config selecting Laplacian smoothing with `2` iterations
 - Checks: config-driven workflow applies GUI-style surface settings through the shared framework.
 - Pass tolerance: result name exactly `smooth_cube_laplacian2` and matching STL output exists.
+
+`test_config_runner_writes_gui_style_separate_output_paths`
+- Input: JSON config with GUI-style separate output paths for TIFF, DAT, STL, and property files.
+- Checks: config-driven workflow writes each selected output to the explicit GUI-style location.
+- Pass tolerance: TIFF, DAT, STL, and property files all exist at the requested paths, and the returned TIFF path is exact.
 
 `test_sampling_helpers_make_deterministic_grid_and_seeded_random_specs`
 - Input: synthetic `(24, 24, 24)` volume dimensions.
