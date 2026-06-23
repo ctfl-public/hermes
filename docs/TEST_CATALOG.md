@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-72 passed
+73 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -44,17 +44,17 @@ The MPI test may need permission for `mpirun` to open local communication socket
 ## GUI
 
 `test_gui_import_and_required_widgets_exist`
-- Input: `HERMESGUI.ui` through `HERMES.py`
+- Input: `hermes/HERMESGUI.ui` through `hermes.gui`
 - Checks: GUI imports and required widgets/buttons exist.
 - Pass tolerance: all listed widget names must be found.
 
 `test_gui_run_pipeline_builds_expected_workflow_config`
-- Inputs: `HERMESGUI.ui`, `cube_16.tif`
+- Inputs: `hermes/HERMESGUI.ui`, `cube_16.tif`
 - Checks: the GUI Run button builds and launches a framework workflow config from table entries, sampling controls, save controls, smoothing controls, and property controls.
 - Pass tolerance: input path and voxel size preserved exactly, sampling config exactly `{"mode": "grid", "volume_length": 8}`, outputs exactly `["tiff"]`, properties exactly `["surface_area"]`, and Laplacian smoothing enabled with `2` iterations.
 
 `test_gui_run_pipeline_builds_workflow_config_for_multi_input`
-- Inputs: `HERMESGUI.ui`, `small_primary_0.tif`, and `small_primary_1.tif`
+- Inputs: `hermes/HERMESGUI.ui`, `small_primary_0.tif`, and `small_primary_1.tif`
 - Checks: GUI Run builds and launches a framework workflow config for multi-input workflows.
 - Pass tolerance: both input filenames and voxel sizes preserved exactly, sampling config exactly `{"mode": "random", "volume_length": 12, "count": 2}`, and outputs exactly `["tiff"]`.
 
@@ -109,17 +109,17 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Pass tolerance: exact exported property list and exact property options for fiber sphere size, pore sphere size, and reference plane.
 
 `test_gui_save_settings_embeds_framework_config`
-- Inputs: `HERMESGUI.ui`, `cube_16.tif`, and a mocked settings-save path
+- Inputs: `hermes/HERMESGUI.ui`, `cube_16.tif`, and a mocked settings-save path
 - Checks: the GUI `Save Settings` workflow writes the current GUI settings plus an embedded framework `workflowConfig`.
 - Pass tolerance: saved JSON contains `workflowConfig`, output root is exact, outputs are exactly `["tiff", "properties"]`, and properties are exactly `["surface_area", "porosity"]`.
 
 `test_gui_load_settings_accepts_raw_workflow_config`
-- Inputs: `HERMESGUI.ui`, `cube_16.tif`, and a mocked raw framework config load path.
+- Inputs: `hermes/HERMESGUI.ui`, `cube_16.tif`, and a mocked raw framework config load path.
 - Checks: the GUI `Load Settings` workflow accepts a raw framework config and populates the current GUI settings fields.
 - Pass tolerance: exact table file path and voxel size, selected TIFF/property outputs, output paths resolved relative to the config file, selected surface-area and porosity flags, Laplacian iteration `2`, and grid sampling volume length `8` with count `0`.
 
 `test_gui_run_pipeline_reports_config_errors_without_running`
-- Inputs: `HERMESGUI.ui`, `cube_16.tif`, and a GUI run request with no selected outputs.
+- Inputs: `hermes/HERMESGUI.ui`, `cube_16.tif`, and a GUI run request with no selected outputs.
 - Checks: the GUI Run button reports the config validation error and does not run another backend.
 - Pass tolerance: error title exactly `Error`, error text contains `Please select at least one`, and the workflow runner is not called.
 
@@ -265,6 +265,11 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: `cube_16.tif`
 - Checks: `python -m hermes mesh` writes a nonempty STL and `python -m hermes properties` writes known cube properties.
 - Pass tolerance: both return codes `0`, STL size `> 0`, closed volume `512 +/- 80`, and porosity `1 - 512 / 16^3 +/- 0.03`.
+
+`test_gui_cli_command_is_discoverable_without_launching`
+- Input: CLI help request for `python -m hermes gui --help`
+- Checks: the GUI command is exposed by the package CLI without launching Qt.
+- Pass tolerance: return code `0` and help text contains `Launch the HERMES graphical interface`.
 
 ## Mesh Cleanup And Outputs
 

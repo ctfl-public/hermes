@@ -78,7 +78,7 @@ def test_gui_segmentation_thread_matches_manual_analytical_mask(fixture_dir):
     pytest.importorskip("PyQt5")
     pytest.importorskip("pyvista")
     pytest.importorskip("pyvistaqt")
-    from HERMES import SegmentationThread
+    from hermes.gui import SegmentationThread
 
     image = tiff.imread(fixture_dir / "grayscale_two_phase_24.tif")
     expected = tiff.imread(fixture_dir / "grayscale_two_phase_mask_24.tif").astype(bool)

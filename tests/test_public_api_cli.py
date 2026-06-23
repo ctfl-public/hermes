@@ -128,3 +128,15 @@ def test_mesh_and_properties_cli_commands_preserve_known_cube_contract(fixture_d
     values = rows[1]
     assert float(values[header.index("closed_volume")]) == pytest.approx(512.0, abs=80.0)
     assert float(values[header.index("porosity")]) == pytest.approx(1 - 512 / 16**3, abs=0.03)
+
+
+def test_gui_cli_command_is_discoverable_without_launching():
+    result = subprocess.run(
+        [sys.executable, "-m", "hermes", "gui", "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0
+    assert "Launch the HERMES graphical interface" in result.stdout

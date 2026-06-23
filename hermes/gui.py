@@ -152,7 +152,7 @@ class UI(QMainWindow):
     def __init__(self):
         super(UI,self).__init__()
         
-        uic.loadUi('HERMESGUI.ui',self)
+        uic.loadUi(Path(__file__).with_name("HERMESGUI.ui"), self)
         
 
         # Create delete button
@@ -1156,5 +1156,10 @@ def window():
     ui.show()
     sys.exit(app.exec_())
 
-if __name__ == "__main__":
+
+def main() -> int:
     window()
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())

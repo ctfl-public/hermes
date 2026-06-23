@@ -13,7 +13,7 @@ def test_gui_import_and_required_widgets_exist(qtbot=None):
     pytest.importorskip("pyvista")
     pytest.importorskip("pyvistaqt")
     from PyQt5.QtWidgets import QApplication
-    from HERMES import UI
+    from hermes.gui import UI
 
     app = QApplication.instance() or QApplication([])
     ui = UI()
@@ -39,8 +39,8 @@ def test_gui_run_pipeline_builds_expected_workflow_config(monkeypatch, tmp_path,
     pytest.importorskip("pyvista")
     pytest.importorskip("pyvistaqt")
     from PyQt5.QtWidgets import QApplication, QTableWidgetItem
-    import HERMES
-    from HERMES import UI
+    import hermes.gui as HERMES
+    from hermes.gui import UI
 
     captured = {}
 
@@ -84,8 +84,8 @@ def test_gui_run_pipeline_builds_workflow_config_for_multi_input(monkeypatch, tm
     pytest.importorskip("pyvista")
     pytest.importorskip("pyvistaqt")
     from PyQt5.QtWidgets import QApplication, QTableWidgetItem
-    import HERMES
-    from HERMES import UI
+    import hermes.gui as HERMES
+    from hermes.gui import UI
 
     captured = {}
 
@@ -131,7 +131,7 @@ def test_gui_save_settings_embeds_framework_config(monkeypatch, tmp_path, fixtur
     pytest.importorskip("pyvista")
     pytest.importorskip("pyvistaqt")
     from PyQt5.QtWidgets import QApplication, QFileDialog, QTableWidgetItem
-    from HERMES import UI
+    from hermes.gui import UI
 
     settings_path = tmp_path / "settings.json"
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *args, **kwargs: (str(settings_path), ""))
@@ -168,7 +168,7 @@ def test_gui_load_settings_accepts_raw_workflow_config(monkeypatch, tmp_path, fi
     pytest.importorskip("pyvista")
     pytest.importorskip("pyvistaqt")
     from PyQt5.QtWidgets import QApplication, QFileDialog
-    from HERMES import UI
+    from hermes.gui import UI
 
     config_path = tmp_path / "workflow_config.json"
     config = {
@@ -222,8 +222,8 @@ def test_gui_run_pipeline_reports_config_errors_without_running(monkeypatch, fix
     pytest.importorskip("pyvista")
     pytest.importorskip("pyvistaqt")
     from PyQt5.QtWidgets import QApplication, QTableWidgetItem
-    import HERMES
-    from HERMES import UI
+    import hermes.gui as HERMES
+    from hermes.gui import UI
 
     captured = {}
 

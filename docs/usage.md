@@ -1,12 +1,12 @@
 # Usage
 
-HERMES currently provides four user-facing modes.
+HERMES currently provides five user-facing modes.
 
 - Direct CLI commands run basic tasks without a config file.
 - `python -m hermes run CONFIG.json` runs a workflow from a JSON config file.
 - `python -m hermes mpi` runs the current framework MPI entry point.
 - `import hermes` exposes the Python API for scripts and notebooks.
-- `HERMES.py` runs the GUI workflow.
+- `python -m hermes gui` runs the GUI workflow.
 
 Activate the environment before using any workflow.
 
@@ -89,7 +89,7 @@ The former MPI script workflow now lives in `hermes.mpi` and is exposed through 
 Launch the GUI from the repository root.
 
 ```bash
-python HERMES.py
+python -m hermes gui
 ```
 
 The GUI supports adding TIFF or DAT inputs.

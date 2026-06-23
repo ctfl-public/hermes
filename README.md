@@ -100,7 +100,7 @@ python -m hermes run examples/quickstart/config.json
 Launch the GUI from the repository root.
 
 ```bash
-python HERMES.py
+python -m hermes gui
 ```
 
 The GUI supports input selection, voxel-size assignment, segmentation, threshold previewing, crop setup, save options, property selection, and voxel rendering.

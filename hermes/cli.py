@@ -44,6 +44,12 @@ def main(argv: list[str] | None = None) -> int:
     mpi.add_argument("--voxel-size", required=True, type=float, help="Input voxel size.")
     mpi.add_argument("--output", required=True, help="Output directory.")
 
+    subparsers.add_parser(
+        "gui",
+        help="Launch the HERMES graphical interface.",
+        description="Launch the HERMES graphical interface.",
+    )
+
     args = parser.parse_args(argv)
     if args.command == "run":
         result = run_config(args.config)
@@ -75,6 +81,10 @@ def main(argv: list[str] | None = None) -> int:
         from hermes.mpi import run_single_volume_mpi
 
         return run_single_volume_mpi(args.input, args.voxel_size, args.output)
+    if args.command == "gui":
+        from hermes.gui import main as gui_main
+
+        return gui_main()
 
     parser.error(f"Unknown command: {args.command}")
     return 2

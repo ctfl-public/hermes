@@ -37,7 +37,7 @@ python -m pytest
 The expected characterization-test result for this draft is:
 
 ```text
-72 passed
+73 passed
 ```
 
 In sandboxed environments, the MPI test may need permission for `mpirun` to open local communication sockets.
