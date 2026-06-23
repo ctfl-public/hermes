@@ -31,238 +31,40 @@ from hermes.centerlines import (
     split_and_order_centerlines as framework_split_and_order_centerlines,
 )
 from hermes.io import load_volume, write_chen_format
+from hermes.legacy_serial import get_stl_legacy, process_single_volume_legacy, voxel2stl_legacy
 from hermes.mesh import check_mesh, create_padding, generate_mesh, load_pymeshlab_mesh, load_trimesh, repair_mesh, smooth_mesh
 from hermes.property_table import compute_and_write_legacy_properties, write_legacy_property_row
 from hermes.properties import fiber_diameter_distribution, pore_distribution
 
 def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
-
-    if savingOptions['property_save']:
-        if savingOptions['property_path'] == '':
-            savingOptions['property_path'] = 'propertyFile.txt' 
-        
-        # Check if file exists to determine if we need to create a new name     
-        if os.path.exists(savingOptions['property_path']):
-            # Create a new name for the file with '_copy' and increment if needed
-            base_name, ext = os.path.splitext(savingOptions['property_path'])
-            copy_fileName = f"{base_name}_copy{ext}"
-    
-            # If the file copy already exists, increment the number until a unique name is found
-            counter = 1
-            while os.path.exists(copy_fileName):
-                copy_fileName = f"{base_name}_copy{counter}{ext}"
-                counter += 1
-            
-            # Update fileName to the new copy file name
-            savingOptions['property_path'] = copy_fileName
-        
-        
-        # Open the new file in write mode to save the data when computed
-        with open(savingOptions['property_path'], 'w') as f:
-            pass
-    
-    if croppingFlag == 'Regular':
-        filenames, filevoxels, numVolumes, volumeLength = cropSettings
-    
-    elif croppingFlag == 'Corners':
-        filenames, filevoxels, cornersMTX, volumeLength = cropSettings
-        
-    
-    # matrix to store Volumes data 
-    sim_mtx = [] #
-    if croppingFlag == 'Regular':
-        if volumeLength != 0 and numVolumes != 0:
-            tempMTX= np.zeros(len(filenames),dtype= 'int')
-            for temp in range(numVolumes):
-                tempName = random.choice(filenames)
-                tempNameIndex = filenames.index(tempName)
-                tempMTX[tempNameIndex] += 1
-     
-    temp_number = 0
-    max_workers = min(8, (os.cpu_count() or 1))  # Cap at 8 workers
-    for num, surf in enumerate(filenames):
-        tempNameIndex = filenames.index(surf)
-        
-        # Load data
-        image_volume = loadData(surf)
-                
-        # max voxel length in x, y, and z
-        voxelsLength = (image_volume.shape[0],image_volume.shape[1],image_volume.shape[2])
-        
-        if croppingFlag == 'Regular':
-            if volumeLength == 0: # create stl from all the volume
-                corner = np.zeros(3, dtype='int')
-                fullvolume = 'Full'
-                getstl(surf, filevoxels[tempNameIndex], temp_number,fullvolume, corner, surfaceSettings, savingOptions)
-                temp_number += 1
-            
-            elif numVolumes == 0:
-                # Number of volumes in each direction
-                dimX = int(voxelsLength[0]*filevoxels[tempNameIndex]/volumeLength)
-                dimY = int(voxelsLength[1]*filevoxels[tempNameIndex]/volumeLength)
-                dimZ = int(voxelsLength[2]*filevoxels[tempNameIndex]/volumeLength)
-                
-                totalvolumes = dimX*dimY*dimZ
-                # if totalvolumes > 10:
-                #     print('Do this in parallel, %i volumes'%(totalvolumes))
-                #     return
-                xCorners = [i*int(volumeLength/filevoxels[tempNameIndex]) for i in range(dimX)]
-                yCorners = [i*int(volumeLength/filevoxels[tempNameIndex]) for i in range(dimY)]
-                zCorners = [i*int(volumeLength/filevoxels[tempNameIndex]) for i in range(dimZ)]
-                corners = list(itertools.product(xCorners,yCorners,zCorners))
-                for corner in corners:
-                    getstl(surf, filevoxels[tempNameIndex], temp_number,volumeLength, corner, surfaceSettings, savingOptions)
-                    temp_number += 1
-                    
-            else:
-                volumes_to_process = tempMTX[num]
-
-                if volumes_to_process > 1000:  # Only parallelize if worth it
-                    print(f'Processing {volumes_to_process} random volumes in parallel for {surf}...')
-                    
-                    with ProcessPoolExecutor(max_workers=max_workers) as executor:
-                        # Submit all tasks
-                        futures = []
-                        for i in range(volumes_to_process):
-                            seed = random.randint(0, 1000000) + i
-                            future = executor.submit(process_single_volume, 
-                                                   (surf, filevoxels[tempNameIndex], temp_number + i,
-                                                    volumeLength, voxelsLength, seed, surfaceSettings, savingOptions))
-                            futures.append(future)
-                        
-                        # Wait for completion and handle results
-                        for future in as_completed(futures):
-                            try:
-                                result = future.result()
-                                print(result)
-                            except Exception as e:
-                                print(f"Error processing volume: {e}")
-                    
-                    temp_number += volumes_to_process
-
-                else:
-                    # Process sequentially for small number of volumes
-                    for times in range(tempMTX[tempNameIndex]):
-                        
-                        print('corner',times,'of',surf)
-                        if numVolumes != 0:
-                            
-                            # name of iteration volume
-                            # tempName = filenames[:-4]+'_V%i'%(temp)
-                            
-                            corner = np.zeros(3, dtype='int')
-                            # get random temp corner
-                            corner[0] = random.randint(0,int(voxelsLength[0]-volumeLength/filevoxels[tempNameIndex])) 
-                            corner[1] = random.randint(0,int(voxelsLength[1]-volumeLength/filevoxels[tempNameIndex]))
-                            corner[2] = random.randint(0,int(voxelsLength[2]-volumeLength/filevoxels[tempNameIndex]))
-                            # center crop
-                            # corner[0] = (voxelsLength[0]-volumeLength)/2 #random.randint(0,voxelsLength[0]-volumeLength) 
-                            # corner[1] = (voxelsLength[1]-volumeLength)/2 #random.randint(0,voxelsLength[1]-volumeLength)
-                            # corner[2] = (voxelsLength[2]-volumeLength)/2 #random.randint(0,voxelsLength[2]-volumeLength)
-
-                            
-                            getstl(surf, filevoxels[tempNameIndex], temp_number,volumeLength, corner, surfaceSettings, savingOptions)
-                            temp_number += 1
-
-        elif croppingFlag == 'Corners':
-            for corner in cornersMTX:
-                getstl(surf, filevoxels[tempNameIndex], temp_number,volumeLength, corner, surfaceSettings, savingOptions)
-                temp_number += 1
+    return voxel2stl_legacy(
+        croppingFlag,
+        cropSettings,
+        surfaceSettings,
+        savingOptions,
+        random_module=random,
+        executor_class=ProcessPoolExecutor,
+        as_completed_fn=as_completed,
+        meshset_loader=loadMeshPymeshlab,
+    )
 
 def process_single_volume(args):
-    """
-    Worker function to process a single volume in parallel.
-    """
-    surf, filevoxel, temp_number, volumeLength, voxelsLength, seed, surfaceSettings, savingOptions = args
-    
-    # Set random seed for reproducibility in parallel processing
-    random.seed(seed)
-    
-    corner = np.zeros(3, dtype='int')
-    # get random temp corner
-    corner[0] = random.randint(0,int(voxelsLength[0]-volumeLength/filevoxel)) 
-    corner[1] = random.randint(0,int(voxelsLength[1]-volumeLength/filevoxel))
-    corner[2] = random.randint(0,int(voxelsLength[2]-volumeLength/filevoxel))
-    
-    # Call getstl function
-    getstl(surf, filevoxel, temp_number, volumeLength, corner, surfaceSettings, savingOptions)
-    
-    return f"Processed corner {temp_number} of {surf}"
+    return process_single_volume_legacy(args)
 
 def loadData(surf):
     return load_volume(surf)
 
-def getstl(surfacename, tifvoxelsize, temp_number,volumeLength, corner, surfaceSettings, savingOptions): 
-    
-    # Create image_volume
-    image_volume = loadData(surfacename)
-
-    # Surface file name
-    tempName = surfacename[:-4]+'_V%i_%i-%i-%i-%s'%(temp_number,corner[0],corner[1],corner[2],volumeLength)
-    
-    if volumeLength != 'Full':
-        # adjust nummber volumelength 
-        volumeLength = int(volumeLength/tifvoxelsize)
-        
-        # Crop the volume of interest
-        temp_volume = image_volume[corner[0]:corner[0]+volumeLength,corner[1]:corner[1]+volumeLength,corner[2]:corner[2]+volumeLength]
-        
-    else: # Create stl from full tif
-        temp_volume = image_volume
-    
-    if np.sum(temp_volume) == 0:
-        print('Empty Volume, there is no material!')
-        return 'Empty'
-    # Make a binary MTX
-    temp_volume = temp_volume/ np.max(temp_volume)
-    
-    # Creat padding around volume 
-    binary_volume = createPadding(temp_volume)
-    
-    # Remove Ilands
-    if savingOptions['voxel_save']:
-        if savingOptions['voxel_path'] != '':
-            if not os.path.exists(savingOptions['voxel_path']):
-                Path(savingOptions['voxel_path']).mkdir(parents=True, exist_ok=True) 
-            writeChenFormat(os.path.join(savingOptions['voxel_path'],os.path.basename(tempName))+'.dat',binary_volume,tifvoxelsize)
-        else:
-            writeChenFormat(os.path.basename(tempName)+'.dat',binary_volume,tifvoxelsize)
-        
-    # Get vertices and faces 
-    vertices, faces = getMesh(binary_volume,volumeLength,tifvoxelsize)
-    
-    # Perform smoothing 
-    tempName, vertices, faces = stlSmoothing(tempName, vertices, faces, surfaceSettings)   
-    
-    # Check mesh 
-    volume_check = checkMesh(vertices, faces)
-
-    if not volume_check:
-        print('%s needs fixing!'%tempName)
-        tempName, vertices, faces = fixMesh(tempName, vertices, faces)
-
-    if savingOptions['property_save']:
-        computeProperties(os.path.basename(tempName)+'.stl', vertices,faces,temp_volume,tifvoxelsize,savingOptions,surfacename)
-        
-    if savingOptions['stl_save']:
-        trimesh_mesh = loadMeshTrimesh(vertices,faces)
-        if savingOptions['stl_path'] != '':
-            if not os.path.exists(savingOptions['stl_path']):
-                Path(savingOptions['stl_path']).mkdir(parents=True, exist_ok=True)
-            # Load mesh from vertices and faces
-            trimesh_mesh.export(os.path.join(savingOptions['stl_path'],os.path.basename(tempName)+'.stl') , file_type="stl_ascii")
-        else:
-            trimesh_mesh.export(os.path.basename(tempName)+'.stl', file_type="stl_ascii")
-            
-    if savingOptions['tiff_save']:
-        if savingOptions['tiff_path'] != '':
-            if not os.path.exists(savingOptions['tiff_path']):
-                Path(savingOptions['tiff_path']).mkdir(parents=True, exist_ok=True)
-            # Save the volume as a 3D TIFF file (uncomment to double check stl)[:-4]
-            tiff.imwrite(os.path.join(savingOptions['tiff_path'],os.path.basename(tempName)+'.tif'), binary_volume[1:-1,1:-1,1:-1].astype(np.uint16),imagej=True)
-        else:
-            # Save the volume as a 3D TIFF file (uncomment to double check stl)[:-4]
-            tiff.imwrite(os.path.basename(tempName)+'.tif', binary_volume[1:-1,1:-1,1:-1].astype(np.uint16),imagej=True)
+def getstl(surfacename, tifvoxelsize, temp_number,volumeLength, corner, surfaceSettings, savingOptions):
+    return get_stl_legacy(
+        surfacename,
+        tifvoxelsize,
+        temp_number,
+        volumeLength,
+        corner,
+        surfaceSettings,
+        savingOptions,
+        meshset_loader=loadMeshPymeshlab,
+    )
     
 
 def createPadding(image_volume):
