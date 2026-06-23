@@ -66,6 +66,66 @@ def build_workflow_config(state: dict) -> dict:
     return config
 
 
+def legacy_settings_from_workflow_config(config: dict, *, base_dir: str | Path | None = None) -> dict:
+    """Translate a framework workflow config into the current GUI settings format."""
+    if "workflowConfig" in config:
+        config = config["workflowConfig"]
+    base_dir = Path(base_dir) if base_dir is not None else None
+    inputs = config["inputs"] if "inputs" in config else [config["input"]]
+    outputs = config.get("outputs", [])
+    output_dir = _resolve_config_path(config.get("output_dir", "."), base_dir)
+    output_paths = {
+        key: _resolve_config_path(value, base_dir)
+        for key, value in config.get("output_paths", {}).items()
+    }
+    properties = set(config.get("properties", []))
+    property_options = config.get("property_options", {})
+    surface_settings = config.get("surface_settings", {})
+    sampling = config.get("sampling", {"mode": "full"})
+    sampling_settings = _legacy_sampling_settings(sampling)
+
+    return {
+        "fileNameTable": [
+            [
+                str(_resolve_config_path(input_config["path"], base_dir)),
+                str(input_config.get("voxel_size", 1.0)),
+            ]
+            for input_config in inputs
+        ],
+        "cornerTable": sampling_settings["cornerTable"],
+        "TiffSavePath": str(output_paths.get("tiff", output_dir / "tiff")),
+        "VoxelSavePath": str(output_paths.get("dat", output_dir / "voxels")),
+        "StlSavePath": str(output_paths.get("stl", output_dir / "stl")),
+        "PropertySavePath": str(output_paths.get("properties", output_dir / "properties.txt")),
+        "PropertySaveFlags": {
+            "MinMax": "min_extents" in properties or "max_extents" in properties,
+            "SurfArea": "surface_area" in properties,
+            "ClosedVolume": "closed_volume" in properties,
+            "VolbyArea": "volume_by_area" in properties,
+            "Porosity": "porosity" in properties,
+            "FiberDiameter": "fiber_diameter" in properties,
+            "FiberDiamSphere": str(property_options.get("fiber_diam_sphere", "")),
+            "PoreDistribution": "pore_distribution" in properties,
+            "PoreDistriDiamSphere": str(property_options.get("pore_dist_sphere", "")),
+            "FiberLength": "fiber_length" in properties,
+            "FiberAngle": "fiber_angle" in properties,
+            "FiberAnglePlane": str(property_options.get("fiber_angle_plane", "XY")),
+        },
+        "Laplacian": bool(surface_settings.get("laplacianFlag")),
+        "LaplacianIter": _optional_text(surface_settings.get("laplacian_iter")),
+        "ScreenedPoisson": bool(surface_settings.get("ScreenedPoissonFlag")),
+        "ScreenedPoissonIter": _optional_text(surface_settings.get("ScreenedPoisson_iter")),
+        "RemoveIslands": bool(surface_settings.get("RemoveIslandsFlag")),
+        "VoxelLength": sampling_settings["VoxelLength"],
+        "VolumeLength": sampling_settings["VolumeLength"],
+        "VolumeLengthCorner": sampling_settings["VolumeLengthCorner"],
+        "TiffSave": "tiff" in outputs,
+        "VoxelSave": "dat" in outputs,
+        "StlSave": "stl" in outputs,
+        "PropertySave": "properties" in outputs,
+    }
+
+
 def _parse_input_rows(rows):
     if not rows:
         raise GuiAdapterError("Please add at least one file with its voxel size.")
@@ -92,6 +152,56 @@ def _parse_input_rows(rows):
         filevoxels.append(voxel_size)
 
     return filenames, filevoxels
+
+
+def _resolve_config_path(path, base_dir: Path | None) -> Path:
+    path = Path(path)
+    if path.is_absolute() or base_dir is None:
+        return path
+    return base_dir / path
+
+
+def _legacy_sampling_settings(sampling):
+    mode = sampling.get("mode", "full")
+    if mode == "corners":
+        return {
+            "cornerTable": [[str(value) for value in corner] for corner in sampling.get("corners", [])],
+            "VoxelLength": "",
+            "VolumeLength": "",
+            "VolumeLengthCorner": str(_first_size_value(sampling.get("size", ""))),
+        }
+    if mode == "grid":
+        return {
+            "cornerTable": [],
+            "VoxelLength": str(sampling.get("volume_length", "")),
+            "VolumeLength": "0",
+            "VolumeLengthCorner": "",
+        }
+    if mode == "random":
+        return {
+            "cornerTable": [],
+            "VoxelLength": str(sampling.get("volume_length", "")),
+            "VolumeLength": str(sampling.get("count", "")),
+            "VolumeLengthCorner": "",
+        }
+    return {
+        "cornerTable": [],
+        "VoxelLength": "0",
+        "VolumeLength": "0",
+        "VolumeLengthCorner": "",
+    }
+
+
+def _first_size_value(size):
+    if isinstance(size, (list, tuple)):
+        return size[0] if size else ""
+    return size
+
+
+def _optional_text(value):
+    if value is None:
+        return ""
+    return str(value)
 
 
 def _parse_corner_rows(rows):

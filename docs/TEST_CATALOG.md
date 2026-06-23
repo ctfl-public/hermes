@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-69 passed
+71 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -93,6 +93,11 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Checks: pure GUI adapter exports a framework `inputs` list for multi-input workflows.
 - Pass tolerance: exact input paths, voxel sizes `1.0` and `2.0`, no single `input` block, and sampling config exactly `{"mode": "grid", "volume_length": 12}`.
 
+`test_gui_adapter_converts_workflow_config_to_legacy_settings`
+- Input: framework workflow config with two inputs, explicit output paths, selected properties, smoothing, cleanup, and random sampling.
+- Checks: pure GUI adapter converts a workflow config into the current GUI settings structure.
+- Pass tolerance: exact resolved input paths, output paths, selected property flags, fiber-angle plane, Laplacian iteration `3`, island-removal flag, volume length `12`, and random count `4`.
+
 `test_gui_adapter_exports_corner_workflow_config`
 - Input: `cube_16.tif` plus two explicit GUI corner rows and shared output paths
 - Checks: pure GUI adapter exports a framework config for explicit-corner sampling.
@@ -107,6 +112,11 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Inputs: `HERMESGUI.ui`, `cube_16.tif`, and a mocked settings-save path
 - Checks: the GUI `Save Settings` workflow writes the legacy GUI settings plus an embedded framework `workflowConfig`.
 - Pass tolerance: saved JSON contains `workflowConfig`, output root is exact, outputs are exactly `["tiff", "properties"]`, and properties are exactly `["surface_area", "porosity"]`.
+
+`test_gui_load_settings_accepts_raw_workflow_config`
+- Inputs: `HERMESGUI.ui`, `cube_16.tif`, and a mocked raw framework config load path.
+- Checks: the GUI `Load Settings` workflow accepts a raw framework config and populates the current GUI settings fields.
+- Pass tolerance: exact table file path and voxel size, selected TIFF/property outputs, output paths resolved relative to the config file, selected surface-area and porosity flags, Laplacian iteration `2`, and grid sampling volume length `8` with count `0`.
 
 ## IO And Mesh
 

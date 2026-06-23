@@ -21,6 +21,7 @@ from PyQt5.QtCore import QRegularExpression, QThread, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap
 import sys
 import os
+from pathlib import Path
 import numpy as np 
 import tifffile as tiff
 import json
@@ -29,7 +30,12 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector
 import pyvista as pv
 from pyvistaqt import BackgroundPlotter, QtInteractor
-from hermes.gui_adapter import GuiAdapterError, build_serial_run_arguments, build_workflow_config
+from hermes.gui_adapter import (
+    GuiAdapterError,
+    build_serial_run_arguments,
+    build_workflow_config,
+    legacy_settings_from_workflow_config,
+)
 from hermes.serial import run_serial
 from hermes.segmentation import segment_greyscale
 from hermes.workflow import run_workflow_config
@@ -711,6 +717,8 @@ class UI(QMainWindow):
         if file_path:
             with open(file_path, 'r') as f:
                 settings = json.load(f)
+            if "fileNameTable" not in settings and ("workflowConfig" in settings or "input" in settings or "inputs" in settings):
+                settings = legacy_settings_from_workflow_config(settings, base_dir=Path(file_path).parent)
 
             self.load_table_data(self.tableWidget, settings.get('fileNameTable', []))
             self.load_table_data(self.CornertableWidget, settings.get('cornerTable', []))

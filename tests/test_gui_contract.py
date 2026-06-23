@@ -161,3 +161,57 @@ def test_gui_save_settings_embeds_framework_config(monkeypatch, tmp_path, fixtur
         assert settings["workflowConfig"]["properties"] == ["surface_area", "porosity"]
     finally:
         ui.close()
+
+
+def test_gui_load_settings_accepts_raw_workflow_config(monkeypatch, tmp_path, fixture_dir, qtbot=None):
+    pytest.importorskip("PyQt5")
+    pytest.importorskip("pyvista")
+    pytest.importorskip("pyvistaqt")
+    from PyQt5.QtWidgets import QApplication, QFileDialog
+    from HERMES import UI
+
+    config_path = tmp_path / "workflow_config.json"
+    config = {
+        "input": {
+            "path": str(fixture_dir / "cube_16.tif"),
+            "voxel_size": 1.0,
+        },
+        "output_dir": "output",
+        "output_paths": {
+            "tiff": "images",
+            "properties": "tables/properties.txt",
+        },
+        "outputs": ["tiff", "properties"],
+        "properties": ["surface_area", "porosity"],
+        "surface_settings": {
+            "laplacianFlag": True,
+            "laplacian_iter": 2,
+            "ScreenedPoissonFlag": False,
+            "ScreenedPoisson_iter": None,
+            "RemoveIslandsFlag": False,
+        },
+        "sampling": {"mode": "grid", "volume_length": 8},
+    }
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *args, **kwargs: (str(config_path), ""))
+
+    app = QApplication.instance() or QApplication([])
+    ui = UI()
+    try:
+        ui.load_settings()
+
+        assert ui.tableWidget.rowCount() == 1
+        assert ui.tableWidget.item(0, 0).text() == str(fixture_dir / "cube_16.tif")
+        assert ui.tableWidget.item(0, 1).text() == "1.0"
+        assert ui.TiffSavecheckBox.isChecked() is True
+        assert ui.TiffSavePathtextEdit.text() == str(tmp_path / "images")
+        assert ui.PropertySavecheckBox.isChecked() is True
+        assert ui.PropertySavePathtextEdit.text() == str(tmp_path / "tables" / "properties.txt")
+        assert ui.SurfAreacheckBox.isChecked() is True
+        assert ui.PorositycheckBox.isChecked() is True
+        assert ui.LaplaciancheckBox.isChecked() is True
+        assert ui.LaplacianItertextEdit.text() == "2"
+        assert ui.VolumnLengthlineEdit.text() == "8"
+        assert ui.VolumnNumberlineEdit.text() == "0"
+    finally:
+        ui.close()

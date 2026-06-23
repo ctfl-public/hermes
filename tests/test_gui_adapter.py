@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from hermes.gui_adapter import GuiAdapterError, build_serial_run_arguments, build_workflow_config
+from hermes.gui_adapter import (
+    GuiAdapterError,
+    build_serial_run_arguments,
+    build_workflow_config,
+    legacy_settings_from_workflow_config,
+)
 
 
 pytestmark = pytest.mark.gui
@@ -225,6 +230,49 @@ def test_gui_adapter_exports_multi_input_workflow_config(fixture_dir, tmp_path):
         },
     ]
     assert config["sampling"] == {"mode": "grid", "volume_length": 12}
+
+
+def test_gui_adapter_converts_workflow_config_to_legacy_settings(tmp_path):
+    config = {
+        "inputs": [
+            {"path": "input/a.tif", "voxel_size": 1.0},
+            {"path": "input/b.tif", "voxel_size": 2.0},
+        ],
+        "output_dir": "output",
+        "output_paths": {
+            "tiff": "images",
+            "properties": "tables/properties.txt",
+        },
+        "outputs": ["tiff", "properties"],
+        "properties": ["surface_area", "porosity", "fiber_angle"],
+        "property_options": {"fiber_angle_plane": "XZ"},
+        "surface_settings": {
+            "laplacianFlag": True,
+            "laplacian_iter": 3,
+            "ScreenedPoissonFlag": False,
+            "ScreenedPoisson_iter": None,
+            "RemoveIslandsFlag": True,
+        },
+        "sampling": {"mode": "random", "volume_length": 12, "count": 4},
+    }
+
+    settings = legacy_settings_from_workflow_config(config, base_dir=tmp_path)
+
+    assert settings["fileNameTable"] == [
+        [str(tmp_path / "input" / "a.tif"), "1.0"],
+        [str(tmp_path / "input" / "b.tif"), "2.0"],
+    ]
+    assert settings["TiffSavePath"] == str(tmp_path / "images")
+    assert settings["PropertySavePath"] == str(tmp_path / "tables" / "properties.txt")
+    assert settings["PropertySaveFlags"]["SurfArea"] is True
+    assert settings["PropertySaveFlags"]["Porosity"] is True
+    assert settings["PropertySaveFlags"]["FiberAngle"] is True
+    assert settings["PropertySaveFlags"]["FiberAnglePlane"] == "XZ"
+    assert settings["Laplacian"] is True
+    assert settings["LaplacianIter"] == "3"
+    assert settings["RemoveIslands"] is True
+    assert settings["VoxelLength"] == "12"
+    assert settings["VolumeLength"] == "4"
 
 
 def test_gui_adapter_exports_advanced_property_config(fixture_dir, tmp_path):

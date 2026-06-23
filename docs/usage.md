@@ -107,6 +107,7 @@ It supports saving segmented TIFFs.
 The Run button uses the shared workflow config path for supported single-input and multi-input workflows, including workflows with separate GUI output folders for TIFF, DAT, STL, and property files.
 It falls back to the serial backend only for workflows that are not yet represented by the config schema.
 For supported property workflows, `Save Settings` also stores a framework `workflowConfig` that can be rerun from the CLI.
+The GUI can also load raw framework config files for supported workflows and populate the current settings fields from them.
 
 ## Segmentation Workflow
 
