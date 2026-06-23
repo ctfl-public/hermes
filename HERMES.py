@@ -490,6 +490,20 @@ class UI(QMainWindow):
         self.SaveTiffSegmentationpushButton.clicked.connect(self.save_tiff_segmentation)
         
         self.show()
+
+    def closeEvent(self, event):
+        if hasattr(self, "rect_selector"):
+            self.rect_selector.set_active(False)
+        for canvas_name in ("canvas", "hist_canvas"):
+            canvas = getattr(self, canvas_name, None)
+            if canvas is not None:
+                canvas._draw_pending = False
+                canvas.close()
+        for figure_name in ("figure", "hist_figure"):
+            figure = getattr(self, figure_name, None)
+            if figure is not None:
+                plt.close(figure)
+        event.accept()
     
     def save_tiff_segmentation(self):
         if hasattr(self, "segmentation_mask") and np.sum(self.segmentation_mask) != 0 and self.segmentation_mask is not None:
