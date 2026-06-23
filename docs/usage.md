@@ -4,6 +4,7 @@ HERMES currently provides four user-facing modes.
 
 - Direct CLI commands run basic tasks without a config file.
 - `python -m hermes run CONFIG.json` runs a workflow from a JSON config file.
+- `python -m hermes mpi` runs the current framework MPI entry point.
 - `import hermes` exposes the Python API for scripts and notebooks.
 - `HERMES.py` runs the GUI workflow.
 
@@ -51,6 +52,16 @@ The config runner also supports an explicit crop block with `corner` and `size` 
 It also supports a `sampling` block for `full`, `corners`, `grid`, and seeded `random` sub-volume generation.
 Future GUI, serial, and MPI cleanup should converge on this config model.
 
+## MPI Workflow
+
+The current framework MPI command processes a single input volume through the shared `Workspace` path.
+
+```bash
+mpirun -n 4 python -m hermes mpi --input segmented.tif --voxel-size 1.0 --output mpi-output
+```
+
+The remaining MPI cleanup should expand this command to run full config workflows.
+
 ## Python API
 
 The same basic tasks can be called from Python.
@@ -70,7 +81,7 @@ Internal helper names should not be needed for normal use.
 ## Legacy Script Workflows
 
 `voxel2stl.py` remains temporarily as a deprecated compatibility wrapper.
-`voxel2stl_mpi.py` remains available during cleanup and still contains legacy edit-in-source settings.
+`voxel2stl_mpi.py` remains temporarily as a legacy MPI wrapper.
 The new direct CLI, Python API, and config workflow are the intended replacement direction.
 
 ## GUI Workflow

@@ -39,6 +39,11 @@ def main(argv: list[str] | None = None) -> int:
     properties.add_argument("--voxel-size", type=float, default=1.0, help="Input voxel size.")
     properties.add_argument("--no-pad", action="store_true", help="Disable one-voxel zero padding before meshing.")
 
+    mpi = subparsers.add_parser("mpi", help="Run an MPI HERMES workflow.")
+    mpi.add_argument("--input", required=True, help="Input TIFF or DAT volume.")
+    mpi.add_argument("--voxel-size", required=True, type=float, help="Input voxel size.")
+    mpi.add_argument("--output", required=True, help="Output directory.")
+
     args = parser.parse_args(argv)
     if args.command == "run":
         result = run_config(args.config)
@@ -66,6 +71,10 @@ def main(argv: list[str] | None = None) -> int:
         result = hermes.properties(args.input, args.output, voxel_size=args.voxel_size, pad=not args.no_pad)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
+    if args.command == "mpi":
+        from hermes.mpi import run_single_volume_mpi
+
+        return run_single_volume_mpi(args.input, args.voxel_size, args.output)
 
     parser.error(f"Unknown command: {args.command}")
     return 2

@@ -117,14 +117,15 @@ See [docs/usage.md](docs/usage.md) for command and config details.
 
 ### MPI Workflow
 
-Edit the settings in `run_voxel2stl()` inside `voxel2stl_mpi.py` and then run the MPI script with the desired rank count.
+Run the framework MPI command with the desired rank count.
 
 ```bash
-mpirun -n 4 python voxel2stl_mpi.py
+mpirun -n 4 python -m hermes mpi --input segmented.tif --voxel-size 1.0 --output mpi-output
 ```
 
 The MPI path is intended for large ensembles of sampled sub-volumes on HPC systems.
-The current MPI script does not yet provide a command-line interface or config-file interface.
+The current framework MPI command handles a single input volume.
+The remaining MPI cleanup should expand this to full config workflows.
 See [docs/mpi.md](docs/mpi.md) for SLURM examples and memory-planning guidance.
 
 ## Feature Summary

@@ -18,6 +18,6 @@ For example, two nodes with 128 GB each provide 256 GB total, and the number of 
 
 ## Current Replacement
 
-The current MPI entry point is `voxel2stl_mpi.py`.
-The current script is still configured by editing `run_voxel2stl()` before launch.
+The current framework MPI entry point is `python -m hermes mpi`.
+`voxel2stl_mpi.py` remains only as legacy provenance during cleanup.
 The public MPI instructions are maintained in [mpi.md](mpi.md).

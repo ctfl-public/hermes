@@ -40,6 +40,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import io, contextlib
 import time
 from hermes import Workspace
+from hermes.mpi import process_single_volume_task, run_mpi_cli
 
 
 
@@ -992,40 +993,11 @@ def run_voxel2stl():
     voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions)
 
 def run_cli(argv=None):
-    parser = argparse.ArgumentParser(description="Run a small MPI HERMES conversion job.")
-    parser.add_argument("--input", required=True, help="Input TIFF or DAT volume.")
-    parser.add_argument("--voxel-size", required=True, type=float, help="Voxel size for the input volume.")
-    parser.add_argument("--output", required=True, help="Output directory.")
-    args = parser.parse_args(argv)
-
-    tasks = [{"input": args.input, "voxel_size": args.voxel_size, "output": args.output, "task_id": 0}]
-    local_tasks = np.array_split(tasks, size)[rank]
-
-    local_results = []
-    for task in local_tasks:
-        local_results.append(_process_cli_task(task))
-
-    all_results = comm.gather(local_results, root=0)
-    if rank == 0:
-        results = [item for sublist in all_results for item in sublist]
-        print(f"Completed {len(results)} volumes", flush=True)
-    return 0
+    return run_mpi_cli(argv, comm=comm)
 
 
 def _process_cli_task(task):
-    output = Path(task["output"])
-    workspace = Workspace.from_file(task["input"], voxel_size=task["voxel_size"])
-    workspace.pad()
-    workspace.generate_mesh()
-    workspace.compute_surface_area()
-    workspace.compute_closed_volume()
-    workspace.compute_volume_by_area()
-    workspace.compute_porosity()
-
-    stem = Path(task["input"]).stem
-    workspace.export_stl(output / "stl" / f"{stem}_V{task['task_id']}_Full.stl")
-    workspace.save_properties(output / "properties.txt")
-    return f"Processed {task['input']}"
+    return process_single_volume_task(task)
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:

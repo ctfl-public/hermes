@@ -1,6 +1,6 @@
 # MPI And HPC Usage
 
-HERMES includes an MPI script for high-throughput microstructure generation and property extraction.
+HERMES includes an MPI entry point for high-throughput microstructure generation and property extraction.
 
 ## Purpose
 
@@ -9,16 +9,14 @@ The MPI workflow distributes those sub-volume tasks across ranks so they can be 
 
 ## Basic Command
 
-<!-- TODO: Add a tiny MPI fixture command once `voxel2stl_mpi.py` accepts reusable input paths or a config file. -->
-
-Run the MPI script from an activated HERMES environment.
-Before running, edit `run_voxel2stl()` in `voxel2stl_mpi.py` so `filenames`, `filevoxels`, output paths, sampling settings, and property options match the target job.
+Run the MPI command from an activated HERMES environment.
 
 ```bash
-mpirun -n 4 python voxel2stl_mpi.py
+mpirun -n 4 python -m hermes mpi --input segmented.tif --voxel-size 1.0 --output mpi-output
 ```
 
-The current MPI script is configured by editing `run_voxel2stl()` in `voxel2stl_mpi.py`.
+The current framework MPI command processes a single input volume through the shared `Workspace` path.
+The remaining MPI cleanup should expand this command to run full config workflows.
 
 ## SLURM Example
 
@@ -33,7 +31,7 @@ The current MPI script is configured by editing `run_voxel2stl()` in `voxel2stl_
 #SBATCH --partition=compute
 
 conda activate hermes
-mpirun -n "$SLURM_NTASKS" python voxel2stl_mpi.py
+mpirun -n "$SLURM_NTASKS" python -m hermes mpi --input segmented.tif --voxel-size 1.0 --output mpi-output
 ```
 
 Adjust node count, task count, memory, partition, and wall time for the target cluster.
@@ -69,13 +67,13 @@ safe structures per node = available node memory / peak memory per structure
 
 <!-- TODO: Remove this section or move it to developer documentation once the public interface is stable. -->
 
-The current MPI script is useful but should be cleaned before a stable public release.
+The current MPI framework path is useful but should be expanded before a stable public release.
 
-- It duplicates logic from `voxel2stl.py`.
-- It uses edited-in settings rather than command-line arguments or config files.
+- `voxel2stl_mpi.py` still contains substantial legacy code.
+- The tested MPI path now lives in `hermes.mpi` and is exposed through `python -m hermes mpi`.
 - Property writing should be made rank-safe by gathering rows before writing.
 - Full-volume behavior should be unified with the serial backend.
 - Scalar and three-axis volume-length behavior should be unified with the serial backend.
-- Documentation and command examples should consistently reference `voxel2stl_mpi.py`.
+- Full config execution should be added to `hermes.mpi`.
 
 The characterization tests include MPI contract tests that describe the desired future behavior.
