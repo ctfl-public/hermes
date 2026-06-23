@@ -11,8 +11,8 @@ def test_directional_porosity_matches_known_layered_volume(fixture_dir):
 
     material = tiff.imread(fixture_dir / "layered_porosity_24.tif")
     volume = np.ones_like(material)
-    locations, porosity = dpp.get1DPorosity(
-        material, volume, np.zeros_like(material), direction="x", bins=4, voxel_size=1
+    locations, porosity = dpp.directional_porosity(
+        material, volume, direction="x", bins=4, voxel_size=1
     )
 
     assert locations == [1, 6.0, 12.0, 18.0]
@@ -27,7 +27,7 @@ def test_porosity_3d_map_matches_known_block_values(tmp_path, fixture_dir):
     material = tiff.imread(fixture_dir / "layered_porosity_24.tif")
     volume = np.ones_like(material)
     out = tmp_path / "maps" / "porosity3d.txt"
-    df = dpp.porosity3DMap(6, material, volume, str(out), voxel_size=1)
+    df = dpp.porosity_3d_map(6, material, volume, str(out), voxel_size=1)
 
     assert out.exists()
     assert len(df) == 4 * 4 * 4

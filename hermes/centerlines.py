@@ -240,7 +240,3 @@ def calculate_centerline_properties(split_centerlines, voxel_size, image, plane:
         np.array(direction_vectors, dtype=np.float32),
         np.array(direction_centerline_ids, dtype=np.int32),
     )
-
-
-# Backward-compatible legacy spelling.
-analyzeCenterLine = analyze_centerline

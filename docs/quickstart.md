@@ -76,9 +76,8 @@ result = hermes.run("examples/quickstart/config.json")
 This tutorial verifies the core install, config execution, TIFF loading, binary volume handling, padding, marching-cubes meshing, STL export, sparse DAT export, and property-table writing.
 It is intentionally small so it can run quickly on a laptop.
 
-## Current Scope
+## Next Steps
 
-The direct CLI commands and Python API are the intended replacement direction for basic non-GUI work.
-The config runner is the intended path for complete reproducible workflows.
-The GUI now uses the shared workflow path for supported single-input property workflows, and supported GUI settings files can be run with `python -m hermes run`.
-MPI execution is available through `python -m hermes mpi`, with full config-driven MPI execution still planned.
+After the quick start, use direct CLI commands for one-step tasks and JSON configs for reproducible multi-step workflows.
+Use `python -m hermes gui` for interactive setup and segmentation.
+Use `python -m hermes mpi` for distributed single-volume MPI runs.

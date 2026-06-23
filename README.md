@@ -10,7 +10,7 @@
 [![Python 3.10](https://img.shields.io/badge/Python-3.10-blue.svg)](environment.yml)
 [![Conda environment](https://img.shields.io/badge/Environment-Conda-green.svg)](environment.yml)
 
-HERMES is a Python framework for extracting geometric and statistical descriptors from three-dimensional volumetric microstructure data, especially XRCT datasets.
+HERMES is a Python framework for extracting geometric and statistical descriptors from three-dimensional volumetric microstructure data.
 It provides an integrated workflow for segmentation, sub-volume sampling, voxel-to-surface reconstruction, mesh cleanup, feature extraction, and high-throughput property analysis.
 The code is designed for heterogeneous materials where a single bulk average does not capture the variability present across a reconstructed volume.
 
@@ -19,17 +19,7 @@ It supports interactive use through a PyQt GUI, scripted serial execution throug
 
 For a complete feature-by-feature reference, see [docs/features.md](docs/features.md).
 
-## Repository Status
-
-This repository is being prepared for public release alongside the HERMES manuscript.
-The current code provides a GUI workflow, direct command-line commands, a JSON config runner, a Python API, and an MPI command for distributed processing.
-The serial workflow now runs through the package framework rather than edited root-level scripts.
-The remaining cleanup work is focused on expanding MPI config execution and making the GUI a visual front end to the same shared backend.
-Characterization tests and public documentation are being added as that consolidation continues.
-
 ## License
-
-<!-- TODO: Confirm the public-release copyright holder for the MIT License before the first public push. -->
 
 This software is intended to be released under the MIT License.
 See [LICENSE](LICENSE).
@@ -73,13 +63,14 @@ See [docs/installation.md](docs/installation.md) for platform notes and troubles
 
 ## Quick Start
 
-The fastest way to try the unified command-line interface is to run one basic task directly.
+The quickest complete example uses generated data and writes a mesh, voxel file, and property table.
 
 ```bash
-python -m hermes mesh path/to/binary-volume.tif output/volume.stl --voxel-size 1.0
+python -m hermes run examples/quickstart/config.json
 ```
 
-For a guided first tutorial with generated data, see [docs/quickstart.md](docs/quickstart.md).
+The generated outputs are written under `examples/quickstart/output`.
+For a guided first tutorial, see [docs/quickstart.md](docs/quickstart.md).
 
 Basic tasks can be run directly:
 
@@ -89,10 +80,10 @@ python -m hermes mesh segmented.tif mesh.stl --voxel-size 1.0
 python -m hermes properties segmented.tif properties.txt --voxel-size 1.0
 ```
 
-To run the same style of workflow from an editable config file, use:
+For an existing binary volume, a single mesh command looks like this:
 
 ```bash
-python -m hermes run examples/quickstart/config.json
+python -m hermes mesh path/to/binary-volume.tif output/volume.stl --voxel-size 1.0
 ```
 
 ### GUI Workflow
@@ -125,8 +116,7 @@ mpirun -n 4 python -m hermes mpi --input segmented.tif --voxel-size 1.0 --output
 ```
 
 The MPI path is intended for large ensembles of sampled sub-volumes on HPC systems.
-The current framework MPI command handles a single input volume.
-The remaining MPI cleanup should expand this to full config workflows.
+The current command-line MPI entry point handles a single input volume through the shared workspace path.
 See [docs/mpi.md](docs/mpi.md) for SLURM examples and memory-planning guidance.
 
 ## Feature Summary
@@ -202,10 +192,8 @@ See [docs/testing.md](docs/testing.md) and [docs/TEST_CATALOG.md](docs/TEST_CATA
 
 ## Citing HERMES
 
-<!-- TODO: Confirm the final journal target, DOI, repository URL, and publication status before the first public push. -->
-
 Please cite the HERMES article when using this repository in published work.
-The bibliographic entry below is a draft and should be updated with the final DOI and publication metadata.
+The bibliographic entry below is preliminary and should be updated with the final DOI and publication metadata.
 
 ```bibtex
 @article{chacon2026hermes,

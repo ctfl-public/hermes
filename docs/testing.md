@@ -11,7 +11,7 @@ conda activate hermes
 python -m pytest
 ```
 
-The expected result for this draft is:
+The expected result is:
 
 ```text
 73 passed

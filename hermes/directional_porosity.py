@@ -213,15 +213,3 @@ def porosity_3d_map(
     save_path.parent.mkdir(parents=True, exist_ok=True)
     dataframe.to_csv(save_path, sep="\t", index=False)
     return dataframe
-
-
-# Backward-compatible legacy names.
-loadData = load_data
-
-
-def get1DPorosity(materialMTX, volumeMTX, openPoreMTX, direction, bins=0, voxel_size=1):
-    return directional_porosity(materialMTX, volumeMTX, direction, bins=bins, voxel_size=voxel_size)
-
-
-def porosity3DMap(volumeLength, materialMTX, volumeMTX, saving3DPath, voxel_size=1):
-    return porosity_3d_map(volumeLength, materialMTX, volumeMTX, saving3DPath, voxel_size=voxel_size)

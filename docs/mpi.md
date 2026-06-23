@@ -17,11 +17,9 @@ mpirun -n 4 python -m hermes mpi --input segmented.tif --voxel-size 1.0 --output
 
 The current framework MPI command processes a single input volume through the shared `Workspace` path.
 The package MPI module also contains the framework runner for regular, grid-like, random, and explicit-corner sampling tasks.
-The remaining MPI cleanup should expose full config workflows through this command.
+Use JSON configs for complete serial workflows and the MPI command for distributed execution.
 
 ## SLURM Example
-
-<!-- TODO: Validate the SLURM example on the target cluster and update partition, module, and Conda activation guidance. -->
 
 ```bash
 #!/bin/bash
@@ -64,15 +62,9 @@ Estimate a safe rank count by dividing available node memory by peak memory per 
 safe structures per node = available node memory / peak memory per structure
 ```
 
-## Current Limitations To Address During Cleanup
-
-<!-- TODO: Remove this section or move it to developer documentation once the public interface is stable. -->
-
-The current MPI framework path is useful but should be expanded before a stable public release.
+## Current MPI Scope
 
 - The tested MPI path lives in `hermes.mpi` and is exposed through `python -m hermes mpi`.
 - Regular, grid-like, random, and explicit-corner sample task orchestration now lives in `hermes.mpi`.
-- Property writing should be made rank-safe by gathering rows before writing.
-- Full config execution should be added to `hermes.mpi`.
-
-The characterization tests include MPI contract tests that describe the desired future behavior.
+- JSON config execution is currently handled by `python -m hermes run`.
+- MPI contract tests cover the public MPI command and package-level sample orchestration.

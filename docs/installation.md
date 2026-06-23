@@ -34,7 +34,7 @@ Verify the environment.
 python -m pytest
 ```
 
-The expected characterization-test result for this draft is:
+The expected characterization-test result is:
 
 ```text
 73 passed
@@ -43,8 +43,6 @@ The expected characterization-test result for this draft is:
 In sandboxed environments, the MPI test may need permission for `mpirun` to open local communication sockets.
 
 ## Platform Notes
-
-<!-- TODO: Verify installation notes on a clean macOS machine, a Linux workstation, and one representative HPC environment before the first public release. -->
 
 ### macOS
 
@@ -58,8 +56,6 @@ Some clusters prefer site-provided MPI modules.
 If a cluster requires a specific MPI stack, rebuild the environment against that stack.
 
 ### PyMeshLab
-
-<!-- TODO: Confirm the best PyMeshLab installation route for macOS, Linux, and cluster environments after dependency testing. -->
 
 PyMeshLab is installed through `pip` in `environment.yml` because Conda availability can vary by platform.
 Most serial workflows can run without exercising PyMeshLab unless screened Poisson reconstruction is selected.

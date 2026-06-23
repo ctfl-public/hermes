@@ -15,8 +15,6 @@ The paper examples focus on XRCT and micro-CT datasets, but the current code ope
 
 ## 2. Material Segmentation
 
-<!-- TODO: Mark which thresholding methods are available in the GUI, CLI, Python API, and config runner after thresholding is unified. -->
-
 Segmentation classifies each voxel as material or void.
 HERMES supports both manual and automatic segmentation workflows.
 
@@ -197,8 +195,6 @@ Supported study types include:
 
 ## 12. Parallel And MPI Execution
 
-<!-- TODO: Revisit this section after MPI config execution is expanded. -->
-
 HERMES supports several execution modes.
 
 - **Serial execution** processes samples one at a time.
@@ -221,8 +217,6 @@ These measurements help estimate how many structures can safely run at once on a
 
 ## 14. User Interfaces
 
-<!-- TODO: Replace the cleanup note below with stable interface documentation once the GUI and script paths are unified. -->
-
 HERMES currently provides several user-facing entry points.
 
 - A PyQt GUI for interactive setup, segmentation, previewing, and execution.
@@ -230,5 +224,3 @@ HERMES currently provides several user-facing entry points.
 - A Python API for scripts and notebooks.
 - JSON config files for reproducible batch workflows.
 - Directional porosity utilities for post-processing.
-
-The planned cleanup will consolidate these entry points around one shared backend while preserving the scientific feature set.

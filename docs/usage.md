@@ -47,11 +47,9 @@ python -m hermes run examples/quickstart/config.json
 ```
 
 The example config generates a tiny binary cube, writes outputs to `examples/quickstart/output`, and computes surface area, closed volume, volume-to-area ratio, and porosity.
-This is the first stable command shape for the unified framework.
 The config runner also supports an explicit crop block with `corner` and `size` fields for reproducible sub-volume extraction.
 It also supports a `sampling` block for `full`, `corners`, `grid`, and seeded `random` sub-volume generation.
 GUI settings files saved from supported workflows include an embedded `workflowConfig` block and can be passed directly to `python -m hermes run`.
-Future MPI cleanup should converge on this config model.
 
 ## MPI Workflow
 
@@ -61,7 +59,7 @@ The current framework MPI command processes a single input volume through the sh
 mpirun -n 4 python -m hermes mpi --input segmented.tif --voxel-size 1.0 --output mpi-output
 ```
 
-The remaining MPI cleanup should expand this command to run full config workflows.
+Use JSON config workflows for complete serial analyses and the MPI command for distributed single-volume jobs.
 
 ## Python API
 
@@ -78,11 +76,6 @@ result = hermes.run("examples/quickstart/config.json")
 
 The public API is intended to stay concise.
 Internal helper names should not be needed for normal use.
-
-## Legacy Script Workflows
-
-The former serial script workflow now lives in the package framework and is exposed through the direct CLI, Python API, and config workflow.
-The former MPI script workflow now lives in `hermes.mpi` and is exposed through `python -m hermes mpi`.
 
 ## GUI Workflow
 
@@ -145,7 +138,7 @@ HERMES partitions the domain into non-overlapping sub-volumes.
 
 ### Explicit Corner Sampling
 
-Use `croppingFlag = "Corners"` and provide explicit `(x, y, z)` corner tuples.
+Use a config `sampling` block with `mode: "corners"` and explicit `(x, y, z)` corner tuples.
 
 ## Property Options
 
@@ -163,8 +156,6 @@ The current property options include:
 
 ## Output Files
 
-<!-- TODO: Add a concrete example output directory tree once a tiny runnable example is included. -->
-
 Depending on selected save flags, HERMES writes several products.
 
 - `.tif` cropped binary volumes.
@@ -176,12 +167,19 @@ Depending on selected save flags, HERMES writes several products.
 
 Output names encode the source file, sub-volume index, selected corner, volume length, and selected smoothing or cleanup settings.
 
-## Current Interface Limits
+The quick-start config writes this structure:
 
-The GUI is the current interactive interface.
-The serial framework now runs through package commands and JSON configs.
-The MPI framework has a package command for the tested single-volume path and package-level orchestration for sampled volumes.
-The cleanup work should keep replacing edited-in settings with a shared backend and a stable config or CLI interface.
+```text
+examples/quickstart/
+  input/
+    quickstart_cube.tif
+  output/
+    properties.txt
+    stl/
+      quickstart_cube.stl
+    voxels/
+      quickstart_cube.dat
+```
 
 ## Directional Porosity Utilities
 

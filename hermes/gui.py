@@ -353,7 +353,7 @@ class UI(QMainWindow):
         
         # Set up Run button
         self.RunpushButton = self.findChild(QPushButton, 'RunpushButton')
-        self.RunpushButton.clicked.connect(self.run_voxel2stl)
+        self.RunpushButton.clicked.connect(self.run_workflow)
         
         # Create Save Settings Button
         self.SaveSettingsButton = self.findChild(QPushButton, 'SaveSettingspushButton')
@@ -1067,7 +1067,7 @@ class UI(QMainWindow):
             self.zmin_input.setText('0')
             self.zmax_input.setText('%i'%self.image_data.shape[0])
     
-    def run_voxel2stl(self):
+    def run_workflow(self):
         state = self._workflow_run_state()
         try:
             workflow_config = build_workflow_config(state)

@@ -64,7 +64,7 @@ def test_gui_run_pipeline_builds_expected_workflow_config(monkeypatch, tmp_path,
         ui.LaplacianItertextEdit.setText("2")
         ui.SurfAreacheckBox.setChecked(True)
 
-        ui.run_voxel2stl()
+        ui.run_workflow()
 
         assert captured["config"]["input"] == {
             "path": str(fixture_dir / "cube_16.tif"),
@@ -108,7 +108,7 @@ def test_gui_run_pipeline_builds_workflow_config_for_multi_input(monkeypatch, tm
         ui.TiffSavecheckBox.setChecked(True)
         ui.TiffSavePathtextEdit.setText(str(tmp_path / "tiff"))
 
-        ui.run_voxel2stl()
+        ui.run_workflow()
 
         assert captured["config"]["inputs"] == [
             {
@@ -248,7 +248,7 @@ def test_gui_run_pipeline_reports_config_errors_without_running(monkeypatch, fix
         ui.VolumnLengthlineEdit.setText("8")
         ui.VolumnNumberlineEdit.setText("0")
 
-        ui.run_voxel2stl()
+        ui.run_workflow()
 
         assert captured["title"] == "Error"
         assert "Please select at least one" in captured["message"]

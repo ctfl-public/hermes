@@ -116,7 +116,7 @@ def repair_mesh(
     *,
     meshset_loader=load_pymeshlab_mesh,
 ) -> tuple[str, np.ndarray, np.ndarray]:
-    """Run the legacy PyMeshLab repair filter sequence."""
+    """Run the PyMeshLab repair filter sequence."""
     mesh_set = meshset_loader(vertices, faces)
     mesh_set.apply_filter("generate_surface_reconstruction_screened_poisson", depth=8, preclean=True)
     mesh_set.apply_filter("meshing_remove_null_faces")
