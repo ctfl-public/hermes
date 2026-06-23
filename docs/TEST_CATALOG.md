@@ -119,9 +119,9 @@ The MPI test may need permission for `mpirun` to open local communication socket
 
 ## Config Runner
 
-`test_run_pipeline_config_writes_known_cube_outputs`
+`test_run_config_writes_known_cube_outputs`
 - Input: generated `config_cube.tif` from a JSON config file
-- Checks: the shared config runner writes input TIFF, STL, sparse DAT, and property-table outputs.
+- Checks: the shared workflow runner writes input TIFF, STL, sparse DAT, and property-table outputs.
 - Pass tolerance: closed volume `512 +/- 80`, porosity `1 - 512 / 16^3 +/- 0.03`, STL file exists with nonzero size, DAT reloads to shape `(18, 18, 18)`, and DAT material count exactly `512`.
 
 `test_python_module_run_entrypoint_uses_json_config`

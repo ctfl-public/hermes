@@ -7,9 +7,9 @@ from pathlib import Path
 import numpy as np
 
 from hermes.io import load_volume, write_chen_format, write_tiff_volume
-from hermes.pipeline import run_pipeline_config
 from hermes.segmentation import SegmentationResult, segment_greyscale
 from hermes.workspace import Workspace
+from hermes.workflow import run_config
 
 
 def segment(
@@ -97,7 +97,7 @@ def properties(
 
 def run(config_path: str | Path) -> dict[str, object]:
     """Run a complete HERMES workflow from a config file."""
-    return run_pipeline_config(config_path)
+    return run_config(config_path)
 
 
 def _write_binary_volume(output_path: str | Path, volume: np.ndarray, voxel_size: float) -> None:

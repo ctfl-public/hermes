@@ -6,7 +6,7 @@ import argparse
 import json
 
 import hermes
-from hermes.pipeline import run_pipeline_config
+from hermes.workflow import run_config
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,7 +41,7 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.command == "run":
-        result = run_pipeline_config(args.config)
+        result = run_config(args.config)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
     if args.command == "segment":

@@ -28,7 +28,7 @@ Examples include:
 - known grayscale masks for segmentation checks
 - known cylinders for fiber diameter checks
 - known layered volumes for directional porosity checks
-- known output counts for sampling and pipeline checks.
+- known output counts for sampling and workflow checks.
 
 ## Test Fixtures
 

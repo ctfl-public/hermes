@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from hermes.io import load_volume
+from hermes import serial
 from tests.helpers import base_saving_options, base_surface_settings, read_property_table
 
 
@@ -9,8 +11,6 @@ pytestmark = pytest.mark.analytical
 
 
 def test_serial_pipeline_writes_properties_for_known_cube(tmp_output, fixture_dir):
-    v2s = pytest.importorskip("voxel2stl")
-
     saving = base_saving_options(
         tmp_output,
         stl_save=True,
@@ -24,7 +24,7 @@ def test_serial_pipeline_writes_properties_for_known_cube(tmp_output, fixture_di
     )
     crop = ([str(fixture_dir / "cube_16.tif")], [1.0], 0, 0)
 
-    v2s.voxel2stl("Regular", crop, base_surface_settings(), saving)
+    serial.run_serial("Regular", crop, base_surface_settings(), saving)
 
     header, rows = read_property_table(tmp_output / "properties.txt")
     assert len(rows) == 1
@@ -38,17 +38,16 @@ def test_serial_pipeline_writes_properties_for_known_cube(tmp_output, fixture_di
 def test_serial_pipeline_exported_tiff_and_dat_preserve_known_crop_content(tmp_output, fixture_dir):
     np = pytest.importorskip("numpy")
     tiff = pytest.importorskip("tifffile")
-    v2s = pytest.importorskip("voxel2stl")
 
     saving = base_saving_options(tmp_output, tiff_save=True, voxel_save=True)
     crop = ([str(fixture_dir / "cube_16.tif")], [1.0], [(3, 5, 4)], 8)
 
-    v2s.voxel2stl("Corners", crop, base_surface_settings(), saving)
+    serial.run_serial("Corners", crop, base_surface_settings(), saving)
 
     exported_tiff = next((tmp_output / "tiff").glob("*.tif"))
     exported_dat = next((tmp_output / "voxel").glob("*.dat"))
     tiff_volume = tiff.imread(exported_tiff)
-    dat_volume = v2s.loadData(str(exported_dat))
+    dat_volume = load_volume(exported_dat)
 
     assert tiff_volume.shape == (8, 8, 8)
     assert int(np.count_nonzero(tiff_volume)) == 8 * 8 * 8
@@ -56,31 +55,25 @@ def test_serial_pipeline_exported_tiff_and_dat_preserve_known_crop_content(tmp_o
 
 
 def test_serial_pipeline_corner_sampling_writes_one_output_per_corner(tmp_output, fixture_dir):
-    v2s = pytest.importorskip("voxel2stl")
-
     saving = base_saving_options(tmp_output, tiff_save=True)
     crop = ([str(fixture_dir / "small_primary_0.tif")], [1.0], [(0, 0, 0), (6, 6, 6)], 12)
 
-    v2s.voxel2stl("Corners", crop, base_surface_settings(), saving)
+    serial.run_serial("Corners", crop, base_surface_settings(), saving)
 
     assert len(list((tmp_output / "tiff").glob("*.tif"))) == 2
 
 
 def test_random_sampling_small_jobs_write_requested_output_count(tmp_output, fixture_dir):
     """Random sampling should produce one output per requested sub-volume."""
-    v2s = pytest.importorskip("voxel2stl")
-
     saving = base_saving_options(tmp_output, tiff_save=True)
     crop = ([str(fixture_dir / "solid_primary_24.tif")], [1.0], 4, 12)
 
-    v2s.voxel2stl("Regular", crop, base_surface_settings(), saving)
+    serial.run_serial("Regular", crop, base_surface_settings(), saving)
 
     assert len(list((tmp_output / "tiff").glob("*.tif"))) == 4
 
 
 def test_serial_pipeline_writes_complete_property_schema_for_fiber_fixture(tmp_output, fixture_dir):
-    v2s = pytest.importorskip("voxel2stl")
-
     saving = base_saving_options(
         tmp_output,
         property_save=True,
@@ -101,7 +94,7 @@ def test_serial_pipeline_writes_complete_property_schema_for_fiber_fixture(tmp_o
     )
     crop = ([str(fixture_dir / "fiber_angle_48.tif")], [1.0], 0, 0)
 
-    v2s.voxel2stl("Regular", crop, base_surface_settings(), saving)
+    serial.run_serial("Regular", crop, base_surface_settings(), saving)
 
     header, rows = read_property_table(tmp_output / "properties.txt")
     expected_columns = [
@@ -141,17 +134,15 @@ def test_serial_pipeline_writes_complete_property_schema_for_fiber_fixture(tmp_o
 def test_multi_primary_random_sampling_distributes_outputs_across_input_volumes(
     monkeypatch, tmp_output, fixture_dir
 ):
-    v2s = pytest.importorskip("voxel2stl")
-
     filenames = [str(fixture_dir / f"small_primary_{idx}.tif") for idx in range(3)]
     sequence = iter(filenames * 2)
-    monkeypatch.setattr(v2s.random, "choice", lambda values: next(sequence))
-    monkeypatch.setattr(v2s.random, "randint", lambda lower, upper: 4)
+    monkeypatch.setattr(serial.random, "choice", lambda values: next(sequence))
+    monkeypatch.setattr(serial.random, "randint", lambda lower, upper: 4)
 
     saving = base_saving_options(tmp_output, tiff_save=True)
     crop = (filenames, [1.0, 1.0, 1.0], 6, 12)
 
-    v2s.voxel2stl("Regular", crop, base_surface_settings(), saving)
+    serial.run_serial("Regular", crop, base_surface_settings(), saving)
 
     outputs = sorted(path.name for path in (tmp_output / "tiff").glob("*.tif"))
     assert len(outputs) == 6
@@ -160,8 +151,6 @@ def test_multi_primary_random_sampling_distributes_outputs_across_input_volumes(
 
 
 def test_large_random_sampling_uses_local_parallel_dispatch(monkeypatch, tmp_output, fixture_dir):
-    v2s = pytest.importorskip("voxel2stl")
-
     submitted = []
 
     class FakeFuture:
@@ -185,13 +174,17 @@ def test_large_random_sampling_uses_local_parallel_dispatch(monkeypatch, tmp_out
             submitted.append(args)
             return FakeFuture(f"processed {len(submitted)}")
 
-    monkeypatch.setattr(v2s, "ProcessPoolExecutor", FakeExecutor)
-    monkeypatch.setattr(v2s, "as_completed", lambda futures: futures)
-
     saving = base_saving_options(tmp_output, tiff_save=True)
     crop = ([str(fixture_dir / "solid_primary_24.tif")], [1.0], 1001, 12)
 
-    v2s.voxel2stl("Regular", crop, base_surface_settings(), saving)
+    serial.run_serial(
+        "Regular",
+        crop,
+        base_surface_settings(),
+        saving,
+        executor_class=FakeExecutor,
+        as_completed_fn=lambda futures: futures,
+    )
 
     assert len(submitted) == 1001
     assert all(args[-2] == base_surface_settings() for args in submitted)

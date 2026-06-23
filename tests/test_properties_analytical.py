@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import pytest
 
+from hermes.centerlines import analyze_centerline
+from hermes.io import load_volume
+from hermes.mesh import create_padding, generate_mesh
+from hermes.properties import fiber_diameter_distribution, pore_distribution
+
 
 pytestmark = pytest.mark.analytical
 
 
 def test_fiber_diameter_for_known_cylinder_is_within_voxel_tolerance(fixture_dir):
-    v2s = pytest.importorskip("voxel2stl")
     tiff = pytest.importorskip("tifffile")
 
     image = tiff.imread(fixture_dir / "fiber_z_48.tif")
-    mean_diameter, std_diameter = v2s.getDiamter(image, tifvoxelsize=1.0, sphereSize=6)
+    mean_diameter, std_diameter, _ = fiber_diameter_distribution(image, voxel_size=1.0, sphere_size=6)
 
     # The fixture has radius 5 voxels, but the current local-maxima sampling
     # reports the inscribed digital-cylinder diameter rather than the nominal
@@ -22,13 +26,10 @@ def test_fiber_diameter_for_known_cylinder_is_within_voxel_tolerance(fixture_dir
 
 
 def test_pore_distribution_for_known_void_cube_is_finite_and_near_expected_size(fixture_dir):
-    v2s = pytest.importorskip("voxel2stl")
     tiff = pytest.importorskip("tifffile")
 
     image = tiff.imread(fixture_dir / "porous_block_24.tif")
-    mean_pore, std_pore, distribution = v2s.getPoreDistribution(
-        image, tifvoxelsize=1.0, sphereSize=6
-    )
+    mean_pore, std_pore, distribution = pore_distribution(image, voxel_size=1.0, sphere_size=6)
 
     assert len(distribution) > 0
     assert mean_pore == pytest.approx(11.5, abs=2.0)
@@ -37,10 +38,9 @@ def test_pore_distribution_for_known_void_cube_is_finite_and_near_expected_size(
 
 def test_mesh_based_porosity_for_known_cuboid_is_close_to_analytical_value(fixture_dir):
     trimesh = pytest.importorskip("trimesh")
-    v2s = pytest.importorskip("voxel2stl")
 
-    volume = v2s.loadData(str(fixture_dir / "cube_16.tif"))
-    vertices, faces = v2s.getMesh(v2s.createPadding(volume), 16, 1.0)
+    volume = load_volume(fixture_dir / "cube_16.tif")
+    vertices, faces = generate_mesh(create_padding(volume), 1.0)
     mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
 
     analytical_porosity = 1.0 - 512.0 / (16.0**3)
@@ -50,11 +50,10 @@ def test_mesh_based_porosity_for_known_cuboid_is_close_to_analytical_value(fixtu
 
 
 def test_single_angled_fiber_orientation_matches_current_reference_plane_convention(fixture_dir):
-    v2s = pytest.importorskip("voxel2stl")
     tiff = pytest.importorskip("tifffile")
 
     image = tiff.imread(fixture_dir / "fiber_angle_48.tif")
-    azimuth, elevation, length, az_std, el_std, length_std = v2s.analyzeCenterLine(
+    azimuth, elevation, length, az_std, el_std, length_std = analyze_centerline(
         image, 1.0, str(fixture_dir / "fiber_angle_48.tif"), plane="XZ"
     )
 

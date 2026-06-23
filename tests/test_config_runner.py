@@ -7,8 +7,8 @@ import sys
 import pytest
 
 from hermes.io import load_volume
-from hermes.pipeline import run_pipeline_config
 from hermes.sampling import grid_specs, random_specs
+from hermes.workflow import run_config
 
 
 def _write_quickstart_config(path, output_dir="output"):
@@ -31,11 +31,11 @@ def _write_quickstart_config(path, output_dir="output"):
     return config
 
 
-def test_run_pipeline_config_writes_known_cube_outputs(tmp_path):
+def test_run_config_writes_known_cube_outputs(tmp_path):
     config_path = tmp_path / "config.json"
     _write_quickstart_config(config_path)
 
-    result = run_pipeline_config(config_path)
+    result = run_config(config_path)
 
     assert result["name"] == "config_cube"
     assert result["properties"]["closed_volume"] == pytest.approx(512.0, abs=80.0)
@@ -89,7 +89,7 @@ def test_config_runner_explicit_crop_preserves_known_tiff_content(tmp_path):
     }
     config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
-    result = run_pipeline_config(config_path)
+    result = run_config(config_path)
 
     output = tmp_path / "crop_output"
     tiff_volume = load_volume(output / "tiff" / "cropped_cube.tif")
@@ -139,7 +139,7 @@ def test_config_runner_corner_sampling_writes_one_output_per_corner(tmp_path):
     }
     config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
 
-    result = run_pipeline_config(config_path)
+    result = run_config(config_path)
     output = tmp_path / "sample_output"
 
     assert len(result["samples"]) == 2

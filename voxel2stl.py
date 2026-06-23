@@ -31,13 +31,13 @@ from hermes.centerlines import (
     split_and_order_centerlines as framework_split_and_order_centerlines,
 )
 from hermes.io import load_volume, write_chen_format
-from hermes.legacy_serial import get_stl_legacy, process_single_volume_legacy, voxel2stl_legacy
+from hermes.serial import process_random_sample, process_sample, run_serial
 from hermes.mesh import check_mesh, create_padding, generate_mesh, load_pymeshlab_mesh, load_trimesh, repair_mesh, smooth_mesh
 from hermes.property_table import compute_and_write_legacy_properties, write_legacy_property_row
 from hermes.properties import fiber_diameter_distribution, pore_distribution
 
 def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
-    return voxel2stl_legacy(
+    return run_serial(
         croppingFlag,
         cropSettings,
         surfaceSettings,
@@ -49,13 +49,13 @@ def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
     )
 
 def process_single_volume(args):
-    return process_single_volume_legacy(args)
+    return process_random_sample(args)
 
 def loadData(surf):
     return load_volume(surf)
 
 def getstl(surfacename, tifvoxelsize, temp_number,volumeLength, corner, surfaceSettings, savingOptions):
-    return get_stl_legacy(
+    return process_sample(
         surfacename,
         tifvoxelsize,
         temp_number,
