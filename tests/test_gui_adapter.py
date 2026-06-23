@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from hermes.gui_adapter import GuiAdapterError, build_serial_run_arguments
+from hermes.gui_adapter import GuiAdapterError, build_serial_run_arguments, build_workflow_config
 
 
 pytestmark = pytest.mark.gui
@@ -114,3 +114,54 @@ def test_gui_adapter_rejects_invalid_corner_row(fixture_dir, tmp_path):
 
     with pytest.raises(GuiAdapterError, match="Invalid corner values"):
         build_serial_run_arguments(state)
+
+
+def test_gui_adapter_exports_regular_workflow_config(fixture_dir, tmp_path):
+    state = base_gui_state(
+        fixture_dir,
+        tmp_path,
+        tiff_path=str(tmp_path / "output" / "tiff"),
+        property_path=str(tmp_path / "output" / "properties.txt"),
+    )
+
+    config = build_workflow_config(state)
+
+    assert config == {
+        "name": "cube_16",
+        "input": {
+            "path": str(fixture_dir / "cube_16.tif"),
+            "voxel_size": 1.0,
+        },
+        "output_dir": str(tmp_path / "output"),
+        "outputs": ["tiff", "properties"],
+        "properties": ["surface_area", "porosity"],
+        "sampling": {"mode": "grid", "volume_length": 8},
+    }
+
+
+def test_gui_adapter_exports_corner_workflow_config(fixture_dir, tmp_path):
+    state = base_gui_state(
+        fixture_dir,
+        tmp_path,
+        active_tab_index=1,
+        corner_rows=[("0", "0", "0"), ("4", "5", "6")],
+        corner_volume_length="12",
+        tiff_path=str(tmp_path / "output" / "tiff"),
+        property_path=str(tmp_path / "output" / "properties.txt"),
+    )
+
+    config = build_workflow_config(state)
+
+    assert config["sampling"] == {
+        "mode": "corners",
+        "corners": [[0, 0, 0], [4, 5, 6]],
+        "size": 12,
+    }
+    assert config["output_dir"] == str(tmp_path / "output")
+
+
+def test_gui_adapter_config_export_rejects_unsupported_properties(fixture_dir, tmp_path):
+    state = base_gui_state(fixture_dir, tmp_path, min_max=True)
+
+    with pytest.raises(GuiAdapterError, match="Config export does not yet support"):
+        build_workflow_config(state)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 
@@ -77,5 +79,42 @@ def test_gui_run_pipeline_builds_expected_serial_call(monkeypatch, tmp_path, fix
         assert captured["surface_settings"]["laplacian_iter"] == 2
         assert captured["saving_options"]["tiff_save"] is True
         assert captured["saving_options"]["property_options"]["surf_area"] is True
+    finally:
+        ui.close()
+
+
+def test_gui_save_settings_embeds_framework_config(monkeypatch, tmp_path, fixture_dir, qtbot=None):
+    pytest.importorskip("PyQt5")
+    pytest.importorskip("pyvista")
+    pytest.importorskip("pyvistaqt")
+    from PyQt5.QtWidgets import QApplication, QFileDialog, QTableWidgetItem
+    from HERMES import UI
+
+    settings_path = tmp_path / "settings.json"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *args, **kwargs: (str(settings_path), ""))
+
+    app = QApplication.instance() or QApplication([])
+    ui = UI()
+    try:
+        ui.tableWidget.setRowCount(1)
+        ui.tableWidget.setItem(0, 0, QTableWidgetItem(str(fixture_dir / "cube_16.tif")))
+        ui.tableWidget.setItem(0, 1, QTableWidgetItem("1.0"))
+        ui.tabWidget.setCurrentIndex(0)
+        ui.VolumnLengthlineEdit.setText("8")
+        ui.VolumnNumberlineEdit.setText("0")
+        ui.TiffSavecheckBox.setChecked(True)
+        ui.TiffSavePathtextEdit.setText(str(tmp_path / "output" / "tiff"))
+        ui.PropertySavecheckBox.setChecked(True)
+        ui.PropertySavePathtextEdit.setText(str(tmp_path / "output" / "properties.txt"))
+        ui.SurfAreacheckBox.setChecked(True)
+        ui.PorositycheckBox.setChecked(True)
+
+        ui.save_settings()
+
+        settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        assert "workflowConfig" in settings
+        assert settings["workflowConfig"]["output_dir"] == str(tmp_path / "output")
+        assert settings["workflowConfig"]["outputs"] == ["tiff", "properties"]
+        assert settings["workflowConfig"]["properties"] == ["surface_area", "porosity"]
     finally:
         ui.close()

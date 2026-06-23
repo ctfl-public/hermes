@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector
 import pyvista as pv
 from pyvistaqt import BackgroundPlotter, QtInteractor
-from hermes.gui_adapter import GuiAdapterError, build_serial_run_arguments
+from hermes.gui_adapter import GuiAdapterError, build_serial_run_arguments, build_workflow_config
 from hermes.serial import run_serial
 from hermes.segmentation import segment_greyscale
 
@@ -684,6 +684,11 @@ class UI(QMainWindow):
                 'PropertySave': self.PropertySavecheckBox.isChecked(),
                 
             }
+
+            try:
+                settings['workflowConfig'] = build_workflow_config(self._serial_run_state())
+            except GuiAdapterError as exc:
+                settings['workflowConfigExportError'] = str(exc)
 
             with open(file_path, 'w') as f:
                 json.dump(settings, f, indent=4)

@@ -30,6 +30,32 @@ def build_serial_run_arguments(state: dict):
     return cropping_flag, crop_settings, surface_settings, saving_options
 
 
+def build_workflow_config(state: dict) -> dict:
+    """Build a shared workflow config from GUI state when the config model supports it."""
+    filenames, filevoxels = _parse_input_rows(state["input_rows"])
+    if len(filenames) != 1:
+        raise GuiAdapterError("Config export currently supports one input volume at a time.")
+
+    _, _, _, saving_options = build_serial_run_arguments(state)
+    output_dir = _config_output_dir(saving_options)
+    config = {
+        "name": Path(filenames[0]).stem,
+        "input": {
+            "path": filenames[0],
+            "voxel_size": filevoxels[0],
+        },
+        "output_dir": output_dir,
+        "outputs": _config_outputs(saving_options),
+        "properties": _config_properties(saving_options["property_options"]),
+    }
+
+    sampling = _config_sampling(state, filevoxels[0])
+    if sampling is not None:
+        config["sampling"] = sampling
+
+    return config
+
+
 def _parse_input_rows(rows):
     if not rows:
         raise GuiAdapterError("Please add at least one file with its voxel size.")
@@ -134,6 +160,109 @@ def _cropping_flag(active_tab_index):
     if active_tab_index >= len(flags):
         return None
     return flags[active_tab_index]
+
+
+def _config_outputs(saving_options):
+    outputs = []
+    if saving_options["stl_save"]:
+        outputs.append("stl")
+    if saving_options["voxel_save"]:
+        outputs.append("dat")
+    if saving_options["tiff_save"]:
+        outputs.append("tiff")
+    if saving_options["property_save"]:
+        outputs.append("properties")
+    return outputs
+
+
+def _config_properties(property_options):
+    supported = {
+        "surf_area": "surface_area",
+        "closed_volume": "closed_volume",
+        "vol_by_area": "volume_by_area",
+        "porosity": "porosity",
+    }
+    unsupported = {
+        "min_max": "Min/max extents",
+        "fiber_diameter": "Fiber diameter",
+        "pore_distribution": "Pore distribution",
+        "FiberAngle": "Fiber angle",
+        "FiberLength": "Fiber length",
+    }
+    selected_unsupported = [label for key, label in unsupported.items() if property_options.get(key)]
+    if selected_unsupported:
+        raise GuiAdapterError(
+            "Config export does not yet support these GUI properties: "
+            + ", ".join(selected_unsupported)
+            + ". Use the GUI Run button for this workflow."
+        )
+
+    return [config_name for gui_name, config_name in supported.items() if property_options.get(gui_name)]
+
+
+def _config_sampling(state, voxel_size):
+    cropping_flag = _cropping_flag(state.get("active_tab_index", 0))
+    if cropping_flag == "Regular":
+        volume_length = _required_int(state.get("regular_volume_length"), "Please enter both the volume length and the number of volumes.")
+        num_volumes = _required_int(state.get("regular_num_volumes"), "Please enter both the volume length and the number of volumes.")
+        if volume_length == 0:
+            return None
+        if num_volumes == 0:
+            return {"mode": "grid", "volume_length": volume_length}
+        return {"mode": "random", "volume_length": volume_length, "count": num_volumes}
+
+    if cropping_flag == "Corners":
+        volume_length = _required_int(state.get("corner_volume_length"), "Please enter the volume length.")
+        size = int(volume_length / voxel_size)
+        return {
+            "mode": "corners",
+            "corners": [list(corner) for corner in _parse_corner_rows(state.get("corner_rows", []))],
+            "size": size,
+        }
+
+    raise GuiAdapterError("Unknown workflow tab selected.")
+
+
+def _config_output_dir(saving_options):
+    roots = []
+    if saving_options["tiff_save"]:
+        roots.append(_infer_output_root(saving_options["tiff_path"], {"tiff"}))
+    if saving_options["voxel_save"]:
+        roots.append(_infer_output_root(saving_options["voxel_path"], {"voxel", "voxels"}))
+    if saving_options["stl_save"]:
+        roots.append(_infer_output_root(saving_options["stl_path"], {"stl"}))
+    if saving_options["property_save"]:
+        roots.append(_infer_property_root(saving_options["property_path"]))
+
+    resolved_roots = [Path(root).expanduser() for root in roots if root not in (None, "")]
+    if not resolved_roots:
+        return "."
+
+    first = resolved_roots[0]
+    if any(root != first for root in resolved_roots[1:]):
+        raise GuiAdapterError(
+            "Config export requires selected output paths to share one output folder. "
+            "Use subfolders named tiff, stl, or voxels under the same folder."
+        )
+    return str(first)
+
+
+def _infer_output_root(path, conventional_names):
+    if path in (None, ""):
+        return ""
+    path = Path(path)
+    if path.name.lower() in conventional_names:
+        return path.parent
+    return path
+
+
+def _infer_property_root(path):
+    if path in (None, ""):
+        return ""
+    path = Path(path)
+    if path.suffix:
+        return path.parent
+    return path
 
 
 def _required_int(value, missing_message):

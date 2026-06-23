@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-57 passed
+61 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -72,6 +72,26 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: valid GUI file settings with a negative corner coordinate
 - Checks: pure GUI adapter rejects invalid corner coordinates before calling the framework.
 - Pass tolerance: raises `GuiAdapterError` with the expected invalid-corner message.
+
+`test_gui_adapter_exports_regular_workflow_config`
+- Input: `cube_16.tif` plus regular-sampling GUI field values and shared output paths
+- Checks: pure GUI adapter exports a framework config for a regular grid-style workflow.
+- Pass tolerance: exact input path, voxel size `1.0`, output root, outputs `["tiff", "properties"]`, properties `["surface_area", "porosity"]`, and sampling config `{"mode": "grid", "volume_length": 8}`.
+
+`test_gui_adapter_exports_corner_workflow_config`
+- Input: `cube_16.tif` plus two explicit GUI corner rows and shared output paths
+- Checks: pure GUI adapter exports a framework config for explicit-corner sampling.
+- Pass tolerance: exact output root and sampling config with corners `[[0, 0, 0], [4, 5, 6]]` and size `12`.
+
+`test_gui_adapter_config_export_rejects_unsupported_properties`
+- Input: valid GUI field values with min/max extent output selected
+- Checks: pure GUI adapter rejects config export for properties not yet supported by the shared config runner.
+- Pass tolerance: raises `GuiAdapterError` with the expected unsupported-property message.
+
+`test_gui_save_settings_embeds_framework_config`
+- Inputs: `HERMESGUI.ui`, `cube_16.tif`, and a mocked settings-save path
+- Checks: the GUI `Save Settings` workflow writes the legacy GUI settings plus an embedded framework `workflowConfig`.
+- Pass tolerance: saved JSON contains `workflowConfig`, output root is exact, outputs are exactly `["tiff", "properties"]`, and properties are exactly `["surface_area", "porosity"]`.
 
 ## IO And Mesh
 
