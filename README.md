@@ -70,7 +70,16 @@ python -m hermes run examples/quickstart/config.json
 ```
 
 The generated outputs are written under `examples/quickstart/output`.
-For a guided first tutorial, see [docs/quickstart.md](docs/quickstart.md).
+After a successful run, you should see:
+
+- [examples/quickstart/input/quickstart_cube.tif](examples/quickstart/input/quickstart_cube.tif): generated binary TIFF input.
+- [examples/quickstart/output/stl/quickstart_cube.stl](examples/quickstart/output/stl/quickstart_cube.stl): generated surface mesh.
+- [examples/quickstart/output/voxels/quickstart_cube.dat](examples/quickstart/output/voxels/quickstart_cube.dat): sparse voxel output.
+- [examples/quickstart/output/properties.txt](examples/quickstart/output/properties.txt): property table with surface area, closed volume, volume-to-area ratio, and porosity.
+
+The config that creates these files is [examples/quickstart/config.json](examples/quickstart/config.json).
+For the guided tutorial, see [docs/quickstart.md](docs/quickstart.md).
+For the command reference, see [docs/usage.md](docs/usage.md).
 
 Basic tasks can be run directly:
 
