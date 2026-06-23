@@ -2,6 +2,7 @@
 
 This document summarizes the example workflows that HERMES is designed to support.
 The repository includes a small generated quick-start example, while paper-scale XRCT datasets should be supplied by the user or linked separately when redistribution is not possible.
+The paper-style examples below are currently a roadmap for tutorial material unless a runnable input dataset is listed in the example folder.
 
 ## Runnable Quick Start
 
@@ -42,6 +43,6 @@ These utilities are useful for spatial variability studies and post-processing o
 
 ## MPI Scaling Studies
 
-MPI workflows distribute sampled volume processing across ranks for larger ensembles.
-A typical scaling study compares wall time and memory against rank count for a fixed workload.
+MPI workflows distribute independent volume-processing tasks across ranks for larger ensembles.
+A typical scaling study compares wall time against rank count for a fixed workload.
 See [mpi.md](mpi.md) for command and HPC guidance.

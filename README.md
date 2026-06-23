@@ -126,7 +126,7 @@ mpirun -n 4 python -m hermes mpi --input segmented.tif --voxel-size 1.0 --output
 
 The MPI path is intended for large ensembles of sampled sub-volumes on HPC systems.
 The current command-line MPI entry point handles a single input volume through the shared workspace path.
-See [docs/mpi.md](docs/mpi.md) for SLURM examples and memory-planning guidance.
+See [docs/mpi.md](docs/mpi.md) for SLURM examples and scaling guidance.
 
 ## Feature Summary
 
@@ -149,7 +149,6 @@ HERMES includes the following major capabilities.
 - Directional porosity profiles and 3D blockwise porosity maps.
 - Property distribution workflows for many sampled sub-volumes.
 - Serial workflow execution and MPI-enabled execution.
-- Memory monitoring and scaling workflows for HPC planning.
 
 The full feature description is maintained in [docs/features.md](docs/features.md).
 
@@ -163,11 +162,11 @@ HERMES can write several output products depending on selected options.
 - Tab-delimited property tables.
 - Fiber direction maps.
 - Directional porosity tables and plots.
-- MPI profiling and timing outputs.
 
 ## Examples
 
-The examples documentation describes reduced workflows that mirror the major HERMES use cases.
+The examples documentation describes the reduced workflows we are preparing to mirror the major HERMES use cases.
+The repository currently includes the runnable generated quick-start example.
 
 - Synthetic fiber validation.
 - Fibrous material property distributions.

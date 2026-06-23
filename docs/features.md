@@ -198,24 +198,12 @@ Supported study types include:
 HERMES supports several execution modes.
 
 - **Serial execution** processes samples one at a time.
-- **MPI execution** distributes sampled sub-volume tasks across ranks on HPC systems.
+- **MPI execution** distributes volume-processing tasks across ranks on HPC systems.
 
-The MPI workflow is intended for large ensembles where hundreds of sub-volumes may be processed concurrently.
+The public MPI command currently processes a single input volume through the shared `Workspace` path.
+The package MPI module also contains sampled-task orchestration for regular, random, and explicit-corner workflows.
 
-## 13. Memory Monitoring And Scaling
-
-Large volumetric-image workflows can be limited by memory.
-HERMES workflows can track memory and timing data for resource planning.
-
-- Resident set size.
-- Virtual memory size.
-- Python allocation peaks.
-- Wall-clock runtime.
-- Speedup for parallel runs.
-
-These measurements help estimate how many structures can safely run at once on a node.
-
-## 14. User Interfaces
+## 13. User Interfaces
 
 HERMES currently provides several user-facing entry points.
 
