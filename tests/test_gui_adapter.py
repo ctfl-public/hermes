@@ -5,7 +5,7 @@ import pytest
 from hermes.gui_adapter import (
     GuiAdapterError,
     build_workflow_config,
-    legacy_settings_from_workflow_config,
+    gui_settings_from_workflow_config,
 )
 
 
@@ -255,7 +255,7 @@ def test_gui_adapter_converts_workflow_config_to_legacy_settings(tmp_path):
         "sampling": {"mode": "random", "volume_length": 12, "count": 4},
     }
 
-    settings = legacy_settings_from_workflow_config(config, base_dir=tmp_path)
+    settings = gui_settings_from_workflow_config(config, base_dir=tmp_path)
 
     assert settings["fileNameTable"] == [
         [str(tmp_path / "input" / "a.tif"), "1.0"],

@@ -33,7 +33,7 @@ from pyvistaqt import BackgroundPlotter, QtInteractor
 from hermes.gui_adapter import (
     GuiAdapterError,
     build_workflow_config,
-    legacy_settings_from_workflow_config,
+    gui_settings_from_workflow_config,
 )
 from hermes.segmentation import segment_greyscale
 from hermes.workflow import run_workflow_config
@@ -716,7 +716,7 @@ class UI(QMainWindow):
             with open(file_path, 'r') as f:
                 settings = json.load(f)
             if "fileNameTable" not in settings and ("workflowConfig" in settings or "input" in settings or "inputs" in settings):
-                settings = legacy_settings_from_workflow_config(settings, base_dir=Path(file_path).parent)
+                settings = gui_settings_from_workflow_config(settings, base_dir=Path(file_path).parent)
 
             self.load_table_data(self.tableWidget, settings.get('fileNameTable', []))
             self.load_table_data(self.CornertableWidget, settings.get('cornerTable', []))

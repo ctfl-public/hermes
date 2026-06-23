@@ -110,7 +110,7 @@ The MPI test may need permission for `mpirun` to open local communication socket
 
 `test_gui_save_settings_embeds_framework_config`
 - Inputs: `HERMESGUI.ui`, `cube_16.tif`, and a mocked settings-save path
-- Checks: the GUI `Save Settings` workflow writes the legacy GUI settings plus an embedded framework `workflowConfig`.
+- Checks: the GUI `Save Settings` workflow writes the current GUI settings plus an embedded framework `workflowConfig`.
 - Pass tolerance: saved JSON contains `workflowConfig`, output root is exact, outputs are exactly `["tiff", "properties"]`, and properties are exactly `["surface_area", "porosity"]`.
 
 `test_gui_load_settings_accepts_raw_workflow_config`

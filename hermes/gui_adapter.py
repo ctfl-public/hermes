@@ -45,7 +45,7 @@ def build_workflow_config(state: dict) -> dict:
     return config
 
 
-def legacy_settings_from_workflow_config(config: dict, *, base_dir: str | Path | None = None) -> dict:
+def gui_settings_from_workflow_config(config: dict, *, base_dir: str | Path | None = None) -> dict:
     """Translate a framework workflow config into the current GUI settings format."""
     if "workflowConfig" in config:
         config = config["workflowConfig"]
@@ -61,7 +61,7 @@ def legacy_settings_from_workflow_config(config: dict, *, base_dir: str | Path |
     property_options = config.get("property_options", {})
     surface_settings = config.get("surface_settings", {})
     sampling = config.get("sampling", {"mode": "full"})
-    sampling_settings = _legacy_sampling_settings(sampling)
+    sampling_settings = _gui_sampling_settings(sampling)
 
     return {
         "fileNameTable": [
@@ -140,7 +140,7 @@ def _resolve_config_path(path, base_dir: Path | None) -> Path:
     return base_dir / path
 
 
-def _legacy_sampling_settings(sampling):
+def _gui_sampling_settings(sampling):
     mode = sampling.get("mode", "full")
     if mode == "corners":
         return {
