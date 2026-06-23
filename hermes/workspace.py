@@ -139,9 +139,9 @@ class Workspace:
         return value
 
     def compute_centerline_orientation(self, plane: str = "XY"):
-        from voxel2stl import analyzeCenterLine
+        from hermes.centerlines import analyze_centerline
 
-        azimuth_mean, elevation_mean, length_mean, azimuth_std, elevation_std, length_std = analyzeCenterLine(
+        azimuth_mean, elevation_mean, length_mean, azimuth_std, elevation_std, length_std = analyze_centerline(
             self._unpadded_matrix(),
             self.voxel_size,
             self.name,

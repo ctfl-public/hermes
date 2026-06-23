@@ -22,8 +22,9 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import json
 from numbers import Number
 from scipy.spatial import cKDTree
+from hermes.centerlines import analyze_centerline
 from hermes.io import load_volume, write_chen_format
-from hermes.mesh import check_mesh, create_padding, generate_mesh, load_trimesh
+from hermes.mesh import check_mesh, create_padding, generate_mesh, load_pymeshlab_mesh, load_trimesh, repair_mesh, smooth_mesh
 from hermes.properties import fiber_diameter_distribution, pore_distribution
 
 def voxel2stl(croppingFlag, cropSettings, surfaceSettings, savingOptions):
@@ -266,60 +267,13 @@ def getMesh(binary_volume,length,voxel_size):
     return generate_mesh(binary_volume, voxel_size)
 
 def stlSmoothing(FileName, vertices, faces, surfaceSettings ):
-    
-    # basestl = FileName+"no-smoothing.stl"
-    # print('Start saving',basestl)
-    # trimesh_mesh.export(basestl, file_type="stl_ascii")
-    # print('Finish saving',basestl)
-    
-    # Apply filter iteration i
-    if surfaceSettings['laplacianFlag']:
-        # Load mesh from vertices and faces
-        trimesh_mesh = loadMeshTrimesh(vertices,faces)
-        filterName = '_laplacian'+str(surfaceSettings['laplacian_iter'])
-        trimesh_mesh = trimesh.smoothing.filter_laplacian(trimesh_mesh, lamb=0.5, iterations=surfaceSettings['laplacian_iter'], volume_constraint=True)
-        faces = trimesh_mesh.faces
-        vertices = trimesh_mesh.vertices
-        
-    elif surfaceSettings['ScreenedPoissonFlag']:
-        filterName = '_screened_poisson'+str(surfaceSettings['ScreenedPoisson_iter'])
-        # Load mesh 
-        ms = loadMeshPymeshlab(vertices,faces)
-        ms.apply_filter('generate_surface_reconstruction_screened_poisson', depth=surfaceSettings['ScreenedPoisson_iter'], preclean=True)
-        mesh = ms.current_mesh()
-        vertices = mesh.vertex_matrix()
-        faces = mesh.face_matrix() 
-    else:
-        filterName = ''
-    
-    if surfaceSettings['RemoveIslandsFlag']: 
-        ms = remove_floating_islands_Stl(vertices,faces)
-        removeIsland = '_NI'
-        mesh = ms.current_mesh()
-        vertices = mesh.vertex_matrix()
-        faces = mesh.face_matrix()
-    else:
-        removeIsland = ''
-        
-    FileName = FileName+filterName+removeIsland
-    
-    return FileName, vertices, faces
+    return smooth_mesh(FileName, vertices, faces, surfaceSettings, meshset_loader=loadMeshPymeshlab)
 
 def loadMeshTrimesh(vertices,faces):
     return load_trimesh(vertices, faces)
 
 def loadMeshPymeshlab(vertices,faces):
-    import pymeshlab as ml
-    
-    # Create meshLab mesh from vertices and faces
-    meshTarget = ml.Mesh(vertices,faces) 
-
-    # Create a MeshSet object
-    ms = ml.MeshSet(verbose=True)
-    
-    ms.add_mesh(meshTarget)
-    
-    return ms
+    return load_pymeshlab_mesh(vertices, faces)
 
 def remove_floating_islands_Stl(vertices,faces):
 
@@ -339,22 +293,9 @@ def checkMesh(vertices,faces):
 
 def fixMesh(FileName,vertices,faces):
     print('trying to fix it', FileName)
-    # Load mesh 
-    ms = loadMeshPymeshlab(vertices,faces)
-    
-    ms.apply_filter('generate_surface_reconstruction_screened_poisson', depth=8, preclean=True)
-    ms.apply_filter('meshing_remove_null_faces')
-    ms.apply_filter('meshing_repair_non_manifold_edges') 
-    ms.apply_filter('meshing_repair_non_manifold_vertices')
-    ms.apply_filter('meshing_remove_duplicate_faces')
-    ms.apply_filter('meshing_remove_duplicate_vertices')
-    ms.apply_filter('meshing_re_orient_faces_coherently')
-
-    FileName = FileName+'_Fixed'
+    FileName, vertices, faces = repair_mesh(FileName, vertices, faces, meshset_loader=loadMeshPymeshlab)
     print(FileName, 'fixed!')
-    # ms.save_current_mesh(FileName+'.stl', binary=False)
-    
-    return FileName, ms.current_mesh().vertex_matrix(), ms.current_mesh().face_matrix()
+    return FileName, vertices, faces
 
 def computeProperties(stlName, vertices, faces, temp_volume, tifvoxelsize, savingOptions,surfacename):
     propertyList = [stlName]
@@ -433,86 +374,7 @@ def getDiamter(image_volume,tifvoxelsize,sphereSize):
     return meanDiameter, stdDiameter
 
 def analyzeCenterLine(image,tifvoxelsize,surfacename,plane='XY'):
-    
-    # Preprocess the image
-    # Apply Gaussian filter with sigma=2
-    image_smoothed = filters.gaussian(image, sigma=1)
-    
-    # Convert to binary: 1 for values greater than the threshold, 0 otherwise
-    image_smoothed = (image_smoothed >= np.max(image_smoothed) * 0.5).astype(np.uint8)
-    
-    # Skeletonize the image
-    skeleton = morphology.skeletonize(image_smoothed)
-    
-    # tiff.imwrite(surfacename[:-4]+'_skeleton.tif', skeleton.astype(np.uint16),imagej=True)
-    
-    # Extract centerline coordinates
-    coords = np.column_stack(np.where(skeleton > 0))  # Get (Z, Y, X) coordinates
-    
-    # Build graph from skeleton pixels
-    G = nx.Graph()
-    for z, y, x in coords:
-        G.add_node((z, y, x))
-    
-    # Define 26-connectivity neighbors
-    neighbors_26 = [(dz, dy, dx) for dz in [-1, 0, 1] 
-                                    for dy in [-1, 0, 1] 
-                                    for dx in [-1, 0, 1] if not (dz == dy == dx == 0)]
-    
-    # Set a **distance threshold** to avoid unwanted shortcuts
-    max_distance = np.sqrt(3)  # Maximum Euclidean distance for direct neighbors
-    
-    
-    # Connect neighboring pixels while **pruning bad connections**
-    for z, y, x in coords:
-        for dz, dy, dx in neighbors_26:
-            neighbor = (z+dz, y+dy, x+dx)
-            if neighbor in G:
-                # Compute Euclidean distance
-                distance = np.linalg.norm(np.array([z, y, x]) - np.array(neighbor))
-                if distance <= max_distance:
-                    G.add_edge((z, y, x), neighbor, weight=distance)
-    
-    # Compute the **Minimal Spanning Tree (MST)** to remove unwanted edges
-    MST = nx.minimum_spanning_tree(G)
-    
-    # Identify true branch points (nodes with degree > 2)
-    branch_points = [node for node in MST.nodes() if MST.degree(node) > 2]
-    
-    # Split centerlines at detected branch points
-    split_centerlines, graph_centerlines = split_and_order_centerlines(MST, branch_points)
-    
-    # Number of centerlines before and after split
-    num_centerlines = len(list(nx.connected_components(MST)))
-    num_split_centerlines = len(split_centerlines)
-    
-    # Compute angles
-    centerline_properties, direction_coords, direction_vectors, direction_centerline_ids = (
-        calculate_centerline_properties(split_centerlines,
-                                        tifvoxelsize,
-                                        image,
-                                        plane
-                                        )
-    )
-
-    # Map direction vectors to material voxels
-    direction_map, distance_map, centerline_id_map = map_direction_to_material_voxels(
-        image,
-        direction_coords,
-        direction_vectors,
-        direction_centerline_ids
-        )
-    
-    # Save the direction vecotr per material voxel
-    save_voxel_direction_map_txt(
-        surfacename[:-4] + '_voxel_directions.txt',
-        direction_map
-        )
-    
-    azimuthMean,elevationMean,lengthMean = np.mean(centerline_properties,axis=0)
-    azimuthSTD, elevationSTD,lengthSTD = np.std(centerline_properties, axis=0, ddof=0)
-    
-    return azimuthMean,elevationMean,lengthMean, azimuthSTD, elevationSTD,lengthSTD 
+    return analyze_centerline(image, tifvoxelsize, surfacename, plane=plane)
 
 def save_voxel_direction_map_txt(filename, direction_map):
     coords = np.column_stack(np.where(~np.isnan(direction_map[..., 0])))

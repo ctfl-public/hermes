@@ -10,6 +10,7 @@ import numpy as np
 import tifffile as tiff
 
 from hermes.io import write_tiff_volume
+from hermes.sampling import specs_from_config
 from hermes.workspace import Workspace
 
 
@@ -33,9 +34,6 @@ def run_volume_pipeline(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    output_set = set(outputs)
-    property_set = set(properties)
-
     workspace = Workspace.from_file(input_path, voxel_size=voxel_size)
     workspace.matrix = (workspace.matrix > 0).astype(np.uint8)
     if crop is not None:
@@ -44,6 +42,31 @@ def run_volume_pipeline(
             dimensions=tuple(int(value) for value in crop["size"]),
         )
     workspace.name = name or workspace.name
+
+    return run_workspace_pipeline(
+        workspace,
+        output_dir,
+        outputs=outputs,
+        properties=properties,
+        pad=pad,
+        append_properties=False,
+    )
+
+
+def run_workspace_pipeline(
+    workspace: Workspace,
+    output_dir: str | Path,
+    *,
+    outputs: Iterable[str] = DEFAULT_OUTPUTS,
+    properties: Iterable[str] = DEFAULT_PROPERTIES,
+    pad: bool = True,
+    append_properties: bool = False,
+) -> dict[str, object]:
+    """Run mesh, output, and property steps for an in-memory workspace."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_set = set(outputs)
+    property_set = set(properties)
 
     if pad:
         workspace.pad()
@@ -74,12 +97,11 @@ def run_volume_pipeline(
         written["tiff"] = str(tiff_path)
     if "properties" in output_set:
         properties_path = output_dir / "properties.txt"
-        workspace.save_properties(properties_path, append=False)
+        workspace.save_properties(properties_path, append=append_properties)
         written["properties"] = str(properties_path)
 
     return {
         "name": workspace.name,
-        "input": str(input_path),
         "output_dir": str(output_dir),
         "properties": dict(workspace.properties),
         "written": written,
@@ -99,6 +121,31 @@ def run_pipeline_config(config_path: str | Path) -> dict[str, object]:
 
     if "generate" in input_config:
         _write_generated_volume(input_path, input_config["generate"])
+
+    if "sampling" in config:
+        voxel_size = float(input_config.get("voxel_size", 1.0))
+        source = Workspace.from_file(input_path, voxel_size=voxel_size)
+        source.matrix = (source.matrix > 0).astype(np.uint8)
+        base_name = config.get("name", Path(input_path).stem)
+        results = []
+        specs = specs_from_config(config["sampling"], source.matrix.shape, voxel_size)
+        for index, spec in enumerate(specs):
+            if spec.size is None:
+                workspace = source.extract_subvolume(corner=spec.corner, dimensions="Full", sub_id=index)
+            else:
+                workspace = source.extract_subvolume(corner=spec.corner, dimensions=spec.size, sub_id=index)
+            workspace.name = f"{base_name}_{spec.label}"
+            results.append(
+                run_workspace_pipeline(
+                    workspace,
+                    output_dir,
+                    outputs=config.get("outputs", DEFAULT_OUTPUTS),
+                    properties=config.get("properties", DEFAULT_PROPERTIES),
+                    pad=bool(config.get("pad", True)),
+                    append_properties=index > 0,
+                )
+            )
+        return {"input": str(input_path), "output_dir": str(output_dir), "samples": results}
 
     return run_volume_pipeline(
         input_path,

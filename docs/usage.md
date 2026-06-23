@@ -48,6 +48,7 @@ python -m hermes run examples/quickstart/config.json
 The example config generates a tiny binary cube, writes outputs to `examples/quickstart/output`, and computes surface area, closed volume, volume-to-area ratio, and porosity.
 This is the first stable command shape for the unified framework.
 The config runner also supports an explicit crop block with `corner` and `size` fields for reproducible sub-volume extraction.
+It also supports a `sampling` block for `full`, `corners`, `grid`, and seeded `random` sub-volume generation.
 Future GUI, serial, and MPI cleanup should converge on this config model.
 
 ## Python API

@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-48 passed
+50 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -133,6 +133,16 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: JSON config file that generates a larger binary cube volume and crops the exact material cube.
 - Checks: config-driven explicit-corner cropping preserves TIFF and DAT content and computes near-zero porosity for the all-material crop.
 - Pass tolerance: TIFF shape exactly `(8, 8, 8)`, TIFF material count exactly `512`, DAT shape exactly `(10, 10, 10)`, DAT material count exactly `512`, closed volume `512 +/- 80`, and porosity `0.0 +/- 0.03`.
+
+`test_sampling_helpers_make_deterministic_grid_and_seeded_random_specs`
+- Input: synthetic `(24, 24, 24)` volume dimensions.
+- Checks: framework sampling helpers reproduce deterministic grid behavior and seeded random behavior.
+- Pass tolerance: exactly `8` grid samples, first grid corner exactly `(0, 0, 0)`, last grid corner exactly `(12, 12, 12)`, repeated seeded random corners exactly equal, and more than one unique random corner.
+
+`test_config_runner_corner_sampling_writes_one_output_per_corner`
+- Input: JSON config file with two explicit corner samples.
+- Checks: config-driven sampling writes one TIFF, DAT, and property row set per requested corner.
+- Pass tolerance: exactly `2` returned samples, exactly `2` TIFF files, exactly `2` DAT files, and `properties.txt` exists.
 
 ## Public API And Direct CLI
 

@@ -1,26 +1,13 @@
 from __future__ import annotations
 
-import types
-
 import pytest
 
 
 pytestmark = pytest.mark.analytical
-
-
-def load_direction_porosity_functions(repo_root):
-    """Load function definitions without executing hard-coded paper paths."""
-    source = (repo_root / "directionPorosityPlotting.py").read_text(encoding="utf-8")
-    prefix = source.split("# TiffPath = ", 1)[0]
-    module = types.ModuleType("directionPorosityPlotting_functions_only")
-    exec(compile(prefix, "directionPorosityPlotting.py", "exec"), module.__dict__)
-    return module
-
-
-def test_directional_porosity_matches_known_layered_volume(repo_root, fixture_dir):
+def test_directional_porosity_matches_known_layered_volume(fixture_dir):
     np = pytest.importorskip("numpy")
     tiff = pytest.importorskip("tifffile")
-    dpp = load_direction_porosity_functions(repo_root)
+    dpp = pytest.importorskip("hermes.directional_porosity")
 
     material = tiff.imread(fixture_dir / "layered_porosity_24.tif")
     volume = np.ones_like(material)
@@ -32,10 +19,10 @@ def test_directional_porosity_matches_known_layered_volume(repo_root, fixture_di
     assert porosity == pytest.approx([1.0, 0.0, 1.0, 0.0])
 
 
-def test_porosity_3d_map_matches_known_block_values(repo_root, tmp_path, fixture_dir):
+def test_porosity_3d_map_matches_known_block_values(tmp_path, fixture_dir):
     np = pytest.importorskip("numpy")
     tiff = pytest.importorskip("tifffile")
-    dpp = load_direction_porosity_functions(repo_root)
+    dpp = pytest.importorskip("hermes.directional_porosity")
 
     material = tiff.imread(fixture_dir / "layered_porosity_24.tif")
     volume = np.ones_like(material)
@@ -47,8 +34,8 @@ def test_porosity_3d_map_matches_known_block_values(repo_root, tmp_path, fixture
     assert set(df["Porosity"].unique()).issubset({0.0, 1.0})
 
 
-def test_directional_porosity_plot_is_written(repo_root, tmp_path):
-    dpp = load_direction_porosity_functions(repo_root)
+def test_directional_porosity_plot_is_written(tmp_path):
+    dpp = pytest.importorskip("hermes.directional_porosity")
 
     out = tmp_path / "x_porosity.png"
     dpp.plot_porosity_scatter(
