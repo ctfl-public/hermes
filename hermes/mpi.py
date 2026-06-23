@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 from pathlib import Path
+import random
 
 import numpy as np
 
 from hermes import Workspace
-from hermes.serial import build_sample_tasks, process_random_sample, process_sample, _prepare_property_file
+from hermes.io import load_volume
+from hermes.workflow import run_workspace
 
 
 def run_mpi_cli(argv=None, *, comm=None) -> int:
@@ -46,7 +49,7 @@ def run_single_volume_mpi(input_path: str, voxel_size: float, output_dir: str, *
 
 
 def run_sample_mpi(cropping_flag, crop_settings, surface_settings, saving_options, *, comm=None) -> list[str] | None:
-    """Distribute legacy-style sample tasks over an MPI communicator."""
+    """Distribute sample tasks over an MPI communicator."""
     if comm is None:
         from mpi4py import MPI
 
@@ -54,9 +57,6 @@ def run_sample_mpi(cropping_flag, crop_settings, surface_settings, saving_option
 
     rank = comm.Get_rank()
     size = comm.Get_size()
-
-    if rank == 0 and saving_options.get("property_save"):
-        _prepare_property_file(saving_options)
 
     saving_options = comm.bcast(saving_options, root=0)
 
@@ -86,31 +86,203 @@ def run_sample_mpi(cropping_flag, crop_settings, surface_settings, saving_option
 
 
 def process_sample_task(task: dict, surface_settings: dict, saving_options: dict) -> str:
-    """Process one distributed sample task using the serial framework."""
+    """Process one distributed sample task using the shared workflow framework."""
     if "seed" in task:
-        return process_random_sample(
-            (
-                task["surface_name"],
-                task["voxel_size"],
-                task["temp_number"],
-                task["volume_length"],
-                task["voxel_lengths"],
-                task["seed"],
-                surface_settings,
-                saving_options,
-            )
+        rng = random.Random(task["seed"])
+        block_size = int(task["volume_length"] / task["voxel_size"])
+        task = {
+            **task,
+            "corner": [
+                rng.randint(0, int(task["voxel_lengths"][0] - block_size)),
+                rng.randint(0, int(task["voxel_lengths"][1] - block_size)),
+                rng.randint(0, int(task["voxel_lengths"][2] - block_size)),
+            ],
+        }
+
+    workspace = Workspace.from_file(task["surface_name"], voxel_size=task["voxel_size"])
+    workspace.matrix = (workspace.matrix > 0).astype(np.uint8)
+    volume_length = task["volume_length"]
+    corner = tuple(int(value) for value in task["corner"])
+    if volume_length == "Full":
+        workspace = workspace.extract_subvolume(corner=corner, dimensions="Full", sub_id=task["temp_number"])
+    else:
+        sample_size = int(volume_length / task["voxel_size"])
+        workspace = workspace.extract_subvolume(
+            corner=corner,
+            dimensions=(sample_size, sample_size, sample_size),
+            sub_id=task["temp_number"],
         )
 
-    result = process_sample(
-        task["surface_name"],
-        task["voxel_size"],
-        task["temp_number"],
-        task["volume_length"],
-        np.asarray(task["corner"], dtype="int"),
-        surface_settings,
-        saving_options,
+    if np.sum(workspace.matrix) == 0:
+        return "Empty"
+
+    workspace.name = _sample_name(task, corner)
+    run_workspace(
+        workspace,
+        _output_dir_from_saving_options(saving_options),
+        outputs=_outputs_from_saving_options(saving_options),
+        properties=_properties_from_saving_options(saving_options),
+        property_options=_property_options_from_saving_options(saving_options),
+        surface_settings=surface_settings,
+        output_paths=_output_paths_from_saving_options(saving_options),
     )
-    return result or f"Processed corner {task['temp_number']} of {task['surface_name']}"
+    return f"Processed corner {task['temp_number']} of {task['surface_name']}"
+
+
+def build_sample_tasks(cropping_flag, crop_settings, *, random_module=random):
+    """Build sample tasks from crop settings."""
+    if cropping_flag == "Regular":
+        filenames, filevoxels, num_volumes, volume_length = crop_settings
+    elif cropping_flag == "Corners":
+        filenames, filevoxels, corners_mtx, volume_length = crop_settings
+    else:
+        raise ValueError(f"Unknown cropping flag: {cropping_flag}")
+
+    sample_counts = None
+    if cropping_flag == "Regular" and volume_length != 0 and num_volumes != 0:
+        sample_counts = np.zeros(len(filenames), dtype="int")
+        for _ in range(num_volumes):
+            selected_name = random_module.choice(filenames)
+            sample_counts[filenames.index(selected_name)] += 1
+
+    tasks = []
+    temp_number = 0
+    for surf in filenames:
+        file_index = filenames.index(surf)
+        voxel_lengths = load_volume(surf).shape
+
+        if cropping_flag == "Regular":
+            if volume_length == 0:
+                tasks.append(
+                    {
+                        "surface_name": surf,
+                        "voxel_size": filevoxels[file_index],
+                        "temp_number": temp_number,
+                        "volume_length": "Full",
+                        "corner": [0, 0, 0],
+                    }
+                )
+                temp_number += 1
+            elif num_volumes == 0:
+                block_size = int(volume_length / filevoxels[file_index])
+                dimensions = [int(length * filevoxels[file_index] / volume_length) for length in voxel_lengths]
+                corners = itertools.product(
+                    [index * block_size for index in range(dimensions[0])],
+                    [index * block_size for index in range(dimensions[1])],
+                    [index * block_size for index in range(dimensions[2])],
+                )
+                for corner in corners:
+                    tasks.append(
+                        {
+                            "surface_name": surf,
+                            "voxel_size": filevoxels[file_index],
+                            "temp_number": temp_number,
+                            "volume_length": volume_length,
+                            "corner": list(corner),
+                        }
+                    )
+                    temp_number += 1
+            else:
+                for index in range(sample_counts[file_index]):
+                    tasks.append(
+                        {
+                            "surface_name": surf,
+                            "voxel_size": filevoxels[file_index],
+                            "temp_number": temp_number,
+                            "volume_length": volume_length,
+                            "voxel_lengths": voxel_lengths,
+                            "seed": random_module.randint(0, 1000000) + index,
+                        }
+                    )
+                    temp_number += 1
+
+        elif cropping_flag == "Corners":
+            for corner in corners_mtx:
+                tasks.append(
+                    {
+                        "surface_name": surf,
+                        "voxel_size": filevoxels[file_index],
+                        "temp_number": temp_number,
+                        "volume_length": volume_length,
+                        "corner": list(corner),
+                    }
+                )
+                temp_number += 1
+
+    return tasks
+
+
+def _sample_name(task: dict, corner: tuple[int, int, int]) -> str:
+    stem = Path(task["surface_name"]).stem
+    return f"{stem}_V{task['temp_number']}_{corner[0]}-{corner[1]}-{corner[2]}-{task['volume_length']}"
+
+
+def _outputs_from_saving_options(saving_options: dict) -> list[str]:
+    outputs = []
+    if saving_options.get("stl_save"):
+        outputs.append("stl")
+    if saving_options.get("voxel_save"):
+        outputs.append("dat")
+    if saving_options.get("tiff_save"):
+        outputs.append("tiff")
+    if saving_options.get("property_save"):
+        outputs.append("properties")
+    return outputs
+
+
+def _properties_from_saving_options(saving_options: dict) -> list[str]:
+    property_options = saving_options.get("property_options", {})
+    properties = []
+    if property_options.get("min_max"):
+        properties.extend(["min_extents", "max_extents"])
+    if property_options.get("surf_area"):
+        properties.append("surface_area")
+    if property_options.get("closed_volume"):
+        properties.append("closed_volume")
+    if property_options.get("vol_by_area"):
+        properties.append("volume_by_area")
+    if property_options.get("porosity"):
+        properties.append("porosity")
+    if property_options.get("fiber_diameter"):
+        properties.append("fiber_diameter")
+    if property_options.get("pore_distribution"):
+        properties.append("pore_distribution")
+    if property_options.get("FiberAngle"):
+        properties.append("fiber_angle")
+    if property_options.get("FiberLength"):
+        properties.append("fiber_length")
+    return properties
+
+
+def _property_options_from_saving_options(saving_options: dict) -> dict[str, object]:
+    property_options = saving_options.get("property_options", {})
+    return {
+        "fiber_diam_sphere": property_options.get("fiber_diam_sphere"),
+        "pore_dist_sphere": property_options.get("pore_dist_sphere"),
+        "fiber_angle_plane": property_options.get("FiberAnglePlane", "XY"),
+    }
+
+
+def _output_paths_from_saving_options(saving_options: dict) -> dict[str, str]:
+    output_paths = {}
+    if saving_options.get("stl_save") and saving_options.get("stl_path"):
+        output_paths["stl"] = saving_options["stl_path"]
+    if saving_options.get("voxel_save") and saving_options.get("voxel_path"):
+        output_paths["dat"] = saving_options["voxel_path"]
+    if saving_options.get("tiff_save") and saving_options.get("tiff_path"):
+        output_paths["tiff"] = saving_options["tiff_path"]
+    if saving_options.get("property_save") and saving_options.get("property_path"):
+        output_paths["properties"] = saving_options["property_path"]
+    return output_paths
+
+
+def _output_dir_from_saving_options(saving_options: dict) -> Path:
+    for key in ("tiff_path", "voxel_path", "stl_path", "property_path"):
+        path = saving_options.get(key)
+        if path:
+            path = Path(path)
+            return path.parent if path.suffix else path
+    return Path(".")
 
 
 def process_single_volume_task(task: dict) -> str:

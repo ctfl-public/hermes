@@ -67,7 +67,7 @@ def test_mpi_tiny_fixture_matches_serial_contract(repo_root, fixture_dir, tmp_pa
     assert (tmp_path / "properties.txt").exists()
 
 
-def test_mpi_framework_processes_corner_samples_with_serial_backend(tmp_output, fixture_dir):
+def test_mpi_framework_processes_corner_samples_with_workflow_backend(tmp_output, fixture_dir):
     saving = base_saving_options(tmp_output, tiff_save=True)
     crop = ([str(fixture_dir / "small_primary_0.tif")], [1.0], [(0, 0, 0), (6, 6, 6)], 12)
 
