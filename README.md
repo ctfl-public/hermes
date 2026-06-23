@@ -72,14 +72,21 @@ See [docs/installation.md](docs/installation.md) for platform notes and troubles
 
 ## Quick Start
 
-Run the no-edit quick-start workflow from the repository root.
+The fastest way to try the unified command-line interface is to run one basic task directly.
 
 ```bash
-python -m hermes quickstart --output hermes-quickstart-output
+python -m hermes mesh path/to/binary-volume.tif output/volume.stl --voxel-size 1.0
 ```
 
-This command generates a tiny synthetic 3D cube, builds a surface mesh, writes voxel and property outputs, and prints a JSON summary.
-See [docs/quickstart.md](docs/quickstart.md) for the expected files and what the example verifies.
+For a guided first tutorial with generated data, see [docs/quickstart.md](docs/quickstart.md).
+
+Basic tasks can be run directly:
+
+```bash
+python -m hermes segment input.tif segmented.tif --method otsu
+python -m hermes mesh segmented.tif mesh.stl --voxel-size 1.0
+python -m hermes properties segmented.tif properties.txt --voxel-size 1.0
+```
 
 To run the same style of workflow from an editable config file, use:
 

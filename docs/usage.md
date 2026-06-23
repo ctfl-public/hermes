@@ -1,12 +1,11 @@
 # Usage
 
-HERMES currently provides three main entry points.
+HERMES currently provides four user-facing modes.
 
-- `python -m hermes quickstart` runs a tiny no-edit workflow for installation checks and first-time use.
+- Direct CLI commands run basic tasks without a config file.
 - `python -m hermes run CONFIG.json` runs a workflow from a JSON config file.
+- `import hermes` exposes the Python API for scripts and notebooks.
 - `HERMES.py` runs the GUI workflow.
-- `voxel2stl.py` runs the serial script workflow.
-- `voxel2stl_mpi.py` runs the MPI workflow.
 
 Activate the environment before using any workflow.
 
@@ -16,13 +15,27 @@ conda activate hermes
 
 ## Quick-Start Workflow
 
-Run the quick-start command to generate a synthetic input volume and write HERMES outputs without editing source files.
+The Quickstart documentation is a short tutorial for fundamental tasks.
+It should be the first place new users go after installation.
+
+See [quickstart.md](quickstart.md) for a generated-data example and direct command walkthrough.
+
+## Direct CLI Commands
+
+Use direct commands for single-step tasks.
 
 ```bash
-python -m hermes quickstart --output hermes-quickstart-output
+python -m hermes segment input.tif segmented.tif --method otsu
+python -m hermes segment input.tif segmented.dat --method manual --min 10000 --max 65535 --voxel-size 1.0
+python -m hermes mesh segmented.tif mesh.stl --voxel-size 1.0
+python -m hermes properties segmented.tif properties.txt --voxel-size 1.0
 ```
 
-See [quickstart.md](quickstart.md) for the output files and expected checks.
+The current direct commands are:
+
+- `segment`: threshold a grayscale TIFF and write a binary TIFF or DAT.
+- `mesh`: convert a binary TIFF or DAT volume to STL.
+- `properties`: compute basic geometric properties for a binary TIFF or DAT volume.
 
 ## Config Workflow
 
@@ -36,6 +49,28 @@ The example config generates a tiny binary cube, writes outputs to `examples/qui
 This is the first stable command shape for the unified framework.
 The config runner also supports an explicit crop block with `corner` and `size` fields for reproducible sub-volume extraction.
 Future GUI, serial, and MPI cleanup should converge on this config model.
+
+## Python API
+
+The same basic tasks can be called from Python.
+
+```python
+import hermes
+
+hermes.segment("input.tif", "segmented.tif", method="otsu")
+hermes.mesh("segmented.tif", "mesh.stl", voxel_size=1.0)
+props = hermes.properties("segmented.tif", "properties.txt", voxel_size=1.0)
+result = hermes.run("examples/quickstart/config.json")
+```
+
+The public API is intended to stay concise.
+Internal helper names should not be needed for normal use.
+
+## Legacy Script Workflows
+
+`voxel2stl.py` and `voxel2stl_mpi.py` remain available during cleanup.
+They still contain legacy edit-in-source settings.
+The new direct CLI, Python API, and config runner are the intended replacement direction.
 
 ## GUI Workflow
 

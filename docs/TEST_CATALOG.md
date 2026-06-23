@@ -8,7 +8,7 @@ The suite uses small generated fixtures so the scientific contracts can be revie
 The expected local result in the HERMES Conda environment is:
 
 ```text
-45 passed
+48 passed
 ```
 
 The MPI test may need permission for `mpirun` to open local communication sockets in sandboxed environments.
@@ -117,18 +117,6 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Checks: the local multiprocessing dispatch path is used for large random-sampling jobs.
 - Pass tolerance: exactly `1001` submitted local-parallel tasks and each task receives the expected surface settings.
 
-## Quick Start CLI
-
-`test_quickstart_cli_writes_known_cube_outputs`
-- Input: generated `quickstart_cube.tif`
-- Checks: the no-edit quick-start command writes input TIFF, STL, sparse DAT, and property-table outputs.
-- Pass tolerance: STL file exists with nonzero size, DAT reloads to shape `(18, 18, 18)` with material count exactly `512`, property header exactly `WorkspaceName`, `surface_area`, `closed_volume`, `volume_by_area`, and `porosity`, closed volume `512 +/- 80`, and porosity `1 - 512 / 16^3 +/- 0.03`.
-
-`test_python_module_quickstart_entrypoint_runs`
-- Input: generated `quickstart_cube.tif`
-- Checks: the exact `python -m hermes quickstart` entry point runs successfully and writes the expected quick-start outputs.
-- Pass tolerance: return code `0`, stdout contains `quickstart_cube`, input TIFF exists, STL file exists with nonzero size, DAT file exists, and property table exists.
-
 ## Config Runner
 
 `test_run_pipeline_config_writes_known_cube_outputs`
@@ -145,6 +133,33 @@ The MPI test may need permission for `mpirun` to open local communication socket
 - Input: JSON config file that generates a larger binary cube volume and crops the exact material cube.
 - Checks: config-driven explicit-corner cropping preserves TIFF and DAT content and computes near-zero porosity for the all-material crop.
 - Pass tolerance: TIFF shape exactly `(8, 8, 8)`, TIFF material count exactly `512`, DAT shape exactly `(10, 10, 10)`, DAT material count exactly `512`, closed volume `512 +/- 80`, and porosity `0.0 +/- 0.03`.
+
+## Public API And Direct CLI
+
+`test_public_api_segment_manual_writes_known_mask`
+- Inputs: `grayscale_two_phase_24.tif`, `grayscale_two_phase_mask_24.tif`
+- Checks: `hermes.segment()` writes a binary mask for manual thresholding.
+- Pass tolerance: exact mask equality and porosity exact by `pytest.approx`.
+
+`test_public_api_mesh_writes_valid_stl_for_known_cube`
+- Input: `cube_16.tif`
+- Checks: `hermes.mesh()` writes a nonempty STL and reports a valid volume mesh.
+- Pass tolerance: STL exists with nonzero size, vertex count `> 0`, face count `> 0`, and `is_volume` exactly `True`.
+
+`test_public_api_properties_match_known_cube`
+- Input: `cube_16.tif`
+- Checks: `hermes.properties()` writes a property table and returns known cube properties.
+- Pass tolerance: closed volume `512 +/- 80`, porosity `1 - 512 / 16^3 +/- 0.03`, exact property header, and workspace name exactly `cube_16.tif`.
+
+`test_segment_cli_command_writes_known_mask`
+- Inputs: `grayscale_two_phase_24.tif`, `grayscale_two_phase_mask_24.tif`
+- Checks: `python -m hermes segment` writes the same binary mask as the known manual threshold result.
+- Pass tolerance: return code `0` and exact mask equality.
+
+`test_mesh_and_properties_cli_commands_preserve_known_cube_contract`
+- Input: `cube_16.tif`
+- Checks: `python -m hermes mesh` writes a nonempty STL and `python -m hermes properties` writes known cube properties.
+- Pass tolerance: both return codes `0`, STL size `> 0`, closed volume `512 +/- 80`, and porosity `1 - 512 / 16^3 +/- 0.03`.
 
 ## Mesh Cleanup And Outputs
 
