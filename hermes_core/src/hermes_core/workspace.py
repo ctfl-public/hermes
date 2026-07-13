@@ -44,6 +44,7 @@ class Workspace:
         # Placeholders for generated geometrical data
         self.vertices = None
         self.faces = None
+        self.direction_map = None
         self.properties = {}
 
     @classmethod
@@ -363,9 +364,21 @@ class Workspace:
         az_m, el_m, len_m = np.mean(props, axis=0)
         az_s, el_s, len_s = np.std(props, axis=0)
 
+        # Always calculate the map so we can use it for VTU export
+        d_map_unpadded, _, _ = self._map_direction_to_material_voxels(mat, d_coords, d_vecs, d_ids)
+        
+        # Create a full-size array (matching the padded matrix) initialized with NaNs
+        self.direction_map = np.full(self.matrix.shape + (3,), np.nan, dtype=np.float32)
+        
+        # Re-insert the unpadded vectors into the correct spatial location
+        if self.padding_size > 0:
+            p = self.padding_size
+            self.direction_map[p:-p, p:-p, p:-p, :] = d_map_unpadded
+        else:
+            self.direction_map = d_map_unpadded
+
         if save_dir_path:
-            d_map, _, _ = self._map_direction_to_material_voxels(mat, d_coords, d_vecs, d_ids)
-            self._save_voxel_direction_map_txt(save_dir_path, d_map)
+            self._save_voxel_direction_map_txt(save_dir_path, d_map_unpadded)
 
         return  float(az_m), float(az_s), float(el_m), float(el_s), float(len_m), float(len_s)
 
@@ -620,6 +633,46 @@ class Workspace:
                 f.write(header)
             f.write(line)
         print(f'Saving properties of {self.name} to {filepath}')
+
+    def export_vtu(self, filepath, scalars_name="Material", filter_background=True):
+        """
+        Exports the current 3D matrix as a volumetric Hexahedral mesh (.vtu) via PyVista.
+        """
+        self._make_parent_path(filepath)
+        
+        if np.sum(self.matrix) == 0:
+            print(f"Warning: {self.name} matrix is completely empty. Skipping VTU export.")
+            return
+
+        grid = pv.ImageData()
+        grid.dimensions = np.array(self.matrix.shape) + 1
+        grid.spacing = self.voxel_size
+        
+        # 1. Attach Scalar Field (The binary/greyscale matrix)
+        grid.cell_data[scalars_name] = self.matrix.flatten(order="F")
+        
+        # 2. Attach Vector Field (The orientation mapping)
+        if hasattr(self, 'direction_map') and self.direction_map is not None:
+            # Flatten spatial dimensions (F-order) but preserve the X, Y, Z components
+            vec_x = self.direction_map[..., 0].flatten(order="F")
+            vec_y = self.direction_map[..., 1].flatten(order="F")
+            vec_z = self.direction_map[..., 2].flatten(order="F")
+            
+            # Stack into an (N, 3) array that PyVista recognizes as vectors
+            vectors = np.column_stack((vec_x, vec_y, vec_z))
+            
+            # Replace NaNs with [0,0,0] to prevent Paraview rendering errors on void space
+            grid.cell_data["Orientation"] = np.nan_to_num(vectors)
+        
+        # 3. Filter and Export
+        if filter_background:
+            max_val = np.max(self.matrix)
+            vtu_mesh = grid.threshold([1e-6, max_val], scalars=scalars_name)
+        else:
+            vtu_mesh = grid.cast_to_unstructured_grid()
+            
+        vtu_mesh.save(filepath)
+        print(f"Successfully exported hexahedral .vtu mesh to: {filepath}")
 
     def _get_versioned_path(self, filepath):
         """
