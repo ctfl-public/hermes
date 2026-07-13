@@ -163,7 +163,7 @@ class Workspace:
         self.vertices, self.faces, _, _ = measure.marching_cubes(binary_matrix, allow_degenerate=False, method='lewiner', spacing=self.voxel_size)
         
         # Flip normals by reversing face winding
-        self.faces = self.faces[:, ::-1]
+        self.invert_faces()
         
     def get_trimesh(self):
         """Helper to quickly return a trimesh object for smoothing/export."""
@@ -228,6 +228,20 @@ class Workspace:
             mesh = trimesh.Trimesh(vertices=self.vertices, faces=self.faces)
 
         return mesh
+    
+    def invert_faces(self):
+        """
+        Inverts the triangle faces by reversing their vertex winding order.
+        This effectively flips the surface normals of the mesh.
+        """
+        if self.vertices is None or self.faces is None:
+            print("No mesh data found. Generating the initial mesh first...")
+            self.generate_mesh()
+            return
+
+        # Reverse the order of the vertex indices for every face triangle
+        self.faces = self.faces[:, ::-1]
+        print(f"Successfully inverted triangle faces for workspace: '{self.name}'")
     
     
     # =========================================================================
@@ -415,7 +429,7 @@ class Workspace:
     def compute_all_properties(self, fiber_sphere=10, pore_sphere=30, plane='XY', step_size=4):
         """Runs the entire characterization analytics portfolio and stores outputs in self.properties."""
         # Ensure mesh exists for geometric properties
-        if np.sum(self.matrix) != 0:
+        if np.sum(self.faces) == 0:
             self.generate_mesh()
 
         # Execute modules
