@@ -1,7 +1,7 @@
 import numpy as np
 from hermes_core import Workspace
 
-def create_synthetic_data(size=50):
+def create_synthetic_sphere(size=50):
     """Creates a 3D matrix with a solid sphere in the center surrounded by noise."""
     print("Generating synthetic 3D data...")
     x, y, z = np.ogrid[-size//2:size//2, -size//2:size//2, -size//2:size//2]
@@ -16,51 +16,111 @@ def create_synthetic_data(size=50):
     matrix = np.clip(matrix + noise, 0, 255).astype(np.uint16)
     return matrix
 
+def create_synthetic_ring(size=60, major_radius=15, minor_radius=6):
+    """Creates a 3D matrix with a solid ring (torus) in the center surrounded by noise."""
+    print("Generating synthetic 3D ring data...")
+    
+    # Create a 3D coordinate grid centered at (0,0,0)
+    x, y, z = np.ogrid[-size//2:size//2, -size//2:size//2, -size//2:size//2]
+    
+    # Torus equation: (sqrt(x^2 + y^2) - R)^2 + z^2 <= r^2
+    # R = major_radius (distance from center to middle of the tube)
+    # r = minor_radius (radius of the tube itself)
+    distance_from_z_axis = np.sqrt(x**2 + y**2)
+    mask = (distance_from_z_axis - major_radius)**2 + z**2 <= minor_radius**2
+    
+    # Create a base matrix: 50 background, 200 foreground (ring)
+    matrix = np.full((size, size, size), 50, dtype=np.uint16)
+    matrix[mask] = 200
+    
+    # Add some random noise to test segmentation robustness
+    noise = np.random.randint(-20, 20, (size, size, size), dtype=np.int16)
+    matrix = np.clip(matrix + noise, 0, 255).astype(np.uint16)
+    
+    return matrix
+
+def create_synthetic_fibers(size=60, num_fibers=15, fiber_radius=5):
+    """Creates a 3D matrix with randomly oriented intersecting fibers surrounded by noise."""
+    print(f"Generating synthetic 3D fiber data ({num_fibers} fibers)...")
+    
+    # Create a base matrix: 50 background
+    matrix = np.full((size, size, size), 50, dtype=np.uint16)
+    
+    # Create a coordinate grid for the entire volume
+    # Shape of coords: (size, size, size, 3)
+    I, J, K = np.indices((size, size, size))
+    coords = np.stack((I, J, K), axis=-1)
+    
+    for _ in range(num_fibers):
+        # Pick a random point in the volume for the fiber to pass through
+        p0 = np.random.rand(3) * size
+        
+        # Generate a random 3D direction vector for the fiber
+        direction = np.random.randn(3)
+        direction /= np.linalg.norm(direction)
+        
+        # Calculate perpendicular distance from all voxels to the 3D line
+        # Distance = ||(Point - LineOrigin) x LineDirection||
+        diff = coords - p0
+        cross_prod = np.cross(diff, direction)
+        dist = np.linalg.norm(cross_prod, axis=-1)
+        
+        # Mask voxels that fall within the fiber radius
+        mask = dist <= fiber_radius
+        matrix[mask] = 200
+        
+    # Add some random noise to test segmentation robustness
+    noise = np.random.randint(-20, 20, (size, size, size), dtype=np.int16)
+    matrix = np.clip(matrix + noise, 0, 255).astype(np.uint16)
+    
+    return matrix
+
 def main():
     # ==========================================================
     # 1. INITIALIZATION & DATA LOADING
     # ==========================================================
     print("\n--- Testing Initialization ---")
-    dummy_data = create_synthetic_data(size=60)
+    dummy_data = create_synthetic_fibers(size=50, num_fibers=3)
     
     # Initialize workspace with the dummy data
     ws = Workspace(matrix=dummy_data, voxel_size=1, name="Test_Sphere")
+    # ws = Workspace.from_file(r'/beegfs/users/lchacon/Projects/HERMES/Git/hermes/grid_physical_15Elevation_1.0.tif', voxel_size=1)
     print(f"Created Workspace: {ws.name} | Shape: {ws.matrix.shape} | Voxel Size: {ws.voxel_size}")
 
     # ==========================================================
     # 2. SAMPLING MODULE
     # ==========================================================
-    print("\n--- Testing Sampling ---")
-    # Extract a specific subvolume (e.g., zooming in on the sphere)
-    sub_ws = ws.extract_subvolume(corner=(10, 10, 10), dimensions=(40, 40, 40))
-    print(f"Extracted Subvolume: {sub_ws.name} | Shape: {sub_ws.matrix.shape}")
+    # print("\n--- Testing Sampling ---")
+    # # Extract a specific subvolume (e.g., zooming in on the sphere)
+    # sub_ws = ws.extract_subvolume(corner=(10, 10, 10), dimensions=(40, 40, 40))
+    # print(f"Extracted Subvolume: {sub_ws.name} | Shape: {sub_ws.matrix.shape}")
 
     # ==========================================================
     # 3. SEGMENTATION
     # ==========================================================
     print("\n--- Testing Segmentation ---")
     # Use Otsu's method to binarize our noisy synthetic data
-    sub_ws.segment(method="Otsu", invert=False)
-    print(f"Segmentation complete. Unique values in matrix: {np.unique(sub_ws.matrix)}")
+    ws.segment(method="Otsu", invert=False)
+    print(f"Segmentation complete. Unique values in matrix: {np.unique(ws.matrix)}")
 
     # ==========================================================
     # 4. MESHING & SMOOTHING
     # ==========================================================
     print("\n--- Testing Meshing & Smoothing ---")
     # Pad the matrix to ensure closed meshes on the boundaries
-    sub_ws.pad()
+    ws.pad()
     
     # Generate the initial mesh
-    sub_ws.generate_mesh()
-    print(f"Initial Mesh Generated: {len(sub_ws.vertices)} vertices, {len(sub_ws.faces)} faces.")
+    ws.generate_mesh()
+    print(f"Initial Mesh Generated: {len(ws.vertices)} vertices, {len(ws.faces)} faces.")
     
     # Check if mesh is a valid volume
-    is_vol = sub_ws.check_mesh()
+    is_vol = ws.check_mesh()
     print(f"Is mesh a closed volume? {is_vol}")
 
     # Apply Laplacian smoothing
-    smoothed_mesh = sub_ws.apply_smoothing({'laplacian': 5})
-    print(f"Applied Smoothing. Workspace name updated to: {sub_ws.name}")
+    smoothed_mesh = ws.apply_smoothing({'laplacian': 5})
+    print(f"Applied Smoothing. Workspace name updated to: {ws.name}")
 
     # ==========================================================
     # 5. PROPERTIES QUANTIFICATION
@@ -68,7 +128,7 @@ def main():
     print("\n--- Testing Property Quantification ---")
     # Run the full analytics suite
     # (Using smaller sphere sizes since our matrix is only 44x44x44 after padding)
-    props = sub_ws.compute_all_properties(fiber_sphere=5, pore_sphere=5, plane='XY')
+    props = ws.compute_all_properties(fiber_sphere=10, pore_sphere=30, plane='XY')
     
     print("Computed Properties:")
     for key, value in props.items():
@@ -77,6 +137,8 @@ def main():
             print(f"  * {key}: {value[:3]} ... (truncated)")
         else:
             print(f"  * {key}: {value}")
+    
+    # print(f"Direction Map: {ws.direction_map}")
 
     # ==========================================================
     # 6. EXPORT / OUTPUT MODULES
@@ -84,17 +146,17 @@ def main():
     print("\n--- Testing Data Export ---")
     
     # 6a. Export STL
-    stl_path = "./output/test_mesh.stl"
-    sub_ws.export_stl(stl_path)
+    stl_path = "./outputs/stlFiles/test_mesh.stl"
+    ws.export_stl(stl_path)
     print(f"Exported STL to: {stl_path}")
     
     # 6b. Export VTU (for ParaView)
-    vtu_path = "./output/test_volume.vtu"
-    sub_ws.export_vtu(vtu_path, scalars_name="Material", filter_background=True)
+    vtu_path = "./outputs/vtuFiles/test_volume.vtu"
+    ws.export_vtu(vtu_path, scalars_name="Material")
     
     # 6c. Save Properties
-    prop_path = "./output/test_properties.txt"
-    sub_ws.save_properties(prop_path, append=False)
+    prop_path = "./outputs/propertiesFiles/test_properties.txt"
+    ws.save_properties(prop_path, append=False)
     print(f"Exported Properties to: {prop_path}")
 
     # ==========================================================
@@ -104,11 +166,11 @@ def main():
     print("Launching Matplotlib Visualization. Close the window to end the script.")
     
     # Visualizing only the solid material (value = 1 after segmentation)
-    sub_ws.visualize_matrix_cutoff_plt(vmin=1, vmax=1, downsample_factor=1)
+    ws.visualize_matrix_cutoff_plt(vmin=1, vmax=1, downsample_factor=1)
     
     # Note: If you want to test the PyVista interactive renderer instead, 
     # comment out the line above and uncomment the line below:
-    # sub_ws.visualize_matrix_cutoff(vmin=1, vmax=1)
+    # ws.visualize_matrix_cutoff(vmin=1, vmax=1)
 
 if __name__ == "__main__":
     main()

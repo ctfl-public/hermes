@@ -633,7 +633,7 @@ class Workspace:
             f.write(line)
         print(f'Saving properties of {self.name} to {filepath}')
 
-    def export_vtu(self, filepath, scalars_name="Material", filter_background=True):
+    def export_vtu(self, filepath, scalars_name="Material", filter_background=False):
         """
         Exports the current 3D matrix as a volumetric Hexahedral mesh (.vtu) via PyVista.
         """
