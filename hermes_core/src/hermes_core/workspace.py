@@ -242,7 +242,6 @@ class Workspace:
 
         # Reverse the order of the vertex indices for every face triangle
         self.faces = self.faces[:, ::-1]
-        print(f"Successfully inverted triangle faces for workspace: '{self.name}'")
     
     
     # =========================================================================
