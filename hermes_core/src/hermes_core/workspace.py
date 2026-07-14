@@ -68,6 +68,62 @@ class Workspace:
         name = filepath.split('/')[-1].split('\\')[-1]
         return cls(matrix=image_volume, voxel_size=voxel_size, name=name)
 
+    @classmethod
+    def from_vtu(cls, filepath, voxel_size=None, scalars_name="Material"):
+        """
+        Generates a Workspace by loading a .vtu (Unstructured Grid) file.
+        Reconstructs the 3D numpy array by mapping unstructured hexahedral cell centers.
+        
+        :param filepath: Path to the .vtu file.
+        :param voxel_size: Optional. If None, auto-detects from the first cell's bounds.
+        :param scalars_name: The name of the cell data array to load as matrix values.
+        """
+        mesh = pv.read(filepath)
+        
+        # 1. Check for valid scalar data in the VTU
+        if scalars_name not in mesh.cell_data:
+            if mesh.active_scalars_name and len(mesh.cell_data[mesh.active_scalars_name]) > 0:
+                print(f"'{scalars_name}' not found. Defaulting to active scalars: '{mesh.active_scalars_name}'")
+                scalars_name = mesh.active_scalars_name
+            else:
+                raise ValueError(f"Could not find valid cell data array '{scalars_name}' in the VTU.")
+                
+        scalars = mesh.cell_data[scalars_name]
+        
+        # 2. Auto-detect voxel size if not explicitly provided
+        if voxel_size is None:
+            # Measure the physical bounding box of the very first cell
+            cb = mesh.cell_bounds(0)
+            voxel_size = np.array([cb[1]-cb[0], cb[3]-cb[2], cb[5]-cb[4]], dtype=float)
+            print(f"Auto-detected voxel size from VTU: {voxel_size}")
+        elif isinstance(voxel_size, (int, float)):
+            voxel_size = np.array([voxel_size, voxel_size, voxel_size], dtype=float)
+        else:
+            voxel_size = np.array(voxel_size, dtype=float)
+            
+        # 3. Extract cell centers to map unstructured data back to a structured 3D grid
+        centers = mesh.cell_centers().points
+        min_coords = centers.min(axis=0)
+        max_coords = centers.max(axis=0)
+        
+        # 4. Determine the bounding box grid shape based on physical distance and voxel size
+        # Add 1 because indices are 0-based
+        shape = np.round((max_coords - min_coords) / voxel_size).astype(int) + 1
+        
+        # Initialize an empty background matrix (0 for void/background)
+        matrix = np.zeros(shape, dtype=np.uint16)
+        
+        # 5. Convert physical center coordinates to 3D matrix indices
+        indices = np.round((centers - min_coords) / voxel_size).astype(int)
+        
+        # 6. Populate the matrix with the scalar values from the VTU
+        matrix[indices[:, 0], indices[:, 1], indices[:, 2]] = scalars.astype(np.uint16)
+        
+        # Clean up the name for the workspace
+        name = filepath.split('/')[-1].split('\\')[-1]
+        
+        return cls(matrix=matrix, voxel_size=voxel_size, name=name)
+
     # =========================================================================
     # Sampling module
     # =========================================================================
@@ -530,38 +586,84 @@ class Workspace:
         dt = distance_transform_edt(image > 0, sampling=self.voxel_size)
 
         props, d_coords, d_vecs, d_ids = [], [], [], []
+        
+        # Track the last valid vector across centerlines (for the zero-norm fallback)
+        last_valid_vector = np.zeros(3, dtype=np.float32)
 
         for cl_id, centerline in enumerate(split_centerlines):
-            vecs, length = [], 0.0
+            # 1. Convert the entire centerline to a single numpy array once
+            cl_arr = np.array(centerline)
+            n_voxels = len(cl_arr)
+            
+            if n_voxels == 0:
+                continue
 
-            for i in range(0, len(centerline) - step_size, step_size):
-                vec = (np.array(centerline[min(i + step_size, len(centerline) - 1)]) - np.array(centerline[i])) * self.voxel_size
-                vecs.append(vec)
-                length += np.linalg.norm(vec)
+            # 2. Vectorized calculation of target indices (clipped to array bounds)
+            target_indices = np.clip(np.arange(n_voxels) + step_size, 0, n_voxels - 1)
+            
+            # 3. Vectorized math: Subtraction and scaling for all voxels simultaneously
+            vecs = (cl_arr[target_indices] - cl_arr) * self.voxel_size
+            norms = np.linalg.norm(vecs, axis=1)
+            
+            # 4. Vectorized normalization (safely avoiding divide-by-zero)
+            valid = norms > 0
+            unit_vecs = np.zeros_like(vecs, dtype=np.float32)
+            unit_vecs[valid] = vecs[valid] / norms[valid, np.newaxis]
+            
+            # 5. Handle the zero-norm fallback (usually the last few voxels)
+            if not np.all(valid):
+                if np.any(valid):
+                    # If there are valid vectors, fill the invalid ones with the last valid one in this line
+                    last_valid_idx = np.where(valid)[0][-1]
+                    unit_vecs[~valid] = unit_vecs[last_valid_idx]
+                else:
+                    # If the entire line is invalid/too short, use the global history fallback
+                    unit_vecs[~valid] = last_valid_vector
+            
+            # Update global fallback for the next centerline
+            last_valid_vector = unit_vecs[-1]
 
-            if not vecs: continue
+            # Store the batch arrays directly (much faster than element-wise appending)
+            d_coords.append(cl_arr)
+            d_vecs.append(unit_vecs)
+            d_ids.append(np.full(n_voxels, cl_id, dtype=np.int32))
 
+            # 6. Mean vector and total length
+            length = np.sum(norms)
             mean_v = np.mean(vecs, axis=0)
+            mean_norm = np.linalg.norm(mean_v)
 
-            if np.linalg.norm(mean_v) == 0: continue
+            # 7. Angle calculations
+            if mean_norm == 0:
+                az, el = 0.0, 0.0
+            else:
+                # Note: Added np.clip to prevent NaN runtime warnings from floating point errors
+                if plane == 'XY':
+                    az, el = np.arctan2(mean_v[1], mean_v[0]), np.arcsin(np.clip(mean_v[2] / mean_norm, -1.0, 1.0))
+                elif plane == 'XZ':
+                    az, el = np.arctan2(mean_v[2], mean_v[0]), np.arcsin(np.clip(mean_v[1] / mean_norm, -1.0, 1.0))
+                elif plane == 'YZ':
+                    az, el = np.arctan2(mean_v[2], mean_v[1]), np.arcsin(np.clip(mean_v[0] / mean_norm, -1.0, 1.0))
+                else:
+                    raise ValueError("Invalid plane option. Choose from 'XY', 'XZ', or 'YZ'.")
 
-            unit_v = mean_v / np.linalg.norm(mean_v)
+            # Start and End EDT addition
+            start_idx = tuple(np.round(cl_arr[0]).astype(int))
+            end_idx = tuple(np.round(cl_arr[-1]).astype(int))
+            length += dt[start_idx] + dt[end_idx]
 
-            for vox in centerline:
-                d_coords.append(vox); d_vecs.append(unit_v); d_ids.append(cl_id)
-            
-            if plane == 'XY': az, el = np.arctan2(mean_v[1], mean_v[0]), np.arcsin(mean_v[2] / np.linalg.norm(mean_v))
-            
-            elif plane == 'XZ': az, el = np.arctan2(mean_v[2], mean_v[0]), np.arcsin(mean_v[1] / np.linalg.norm(mean_v))
-            
-            elif plane == 'YZ': az, el = np.arctan2(mean_v[2], mean_v[1]), np.arcsin(mean_v[0] / np.linalg.norm(mean_v))
-            
-            else: raise ValueError("Invalid plane option. Choose from 'XY', 'XZ', or 'YZ'.")
-
-            length += dt[tuple(np.round(centerline[0]).astype(int))] + dt[tuple(np.round(centerline[-1]).astype(int))]
-            
             props.append([float(np.degrees(az)), float(np.degrees(el)), float(length)])
-        return np.array(props, dtype=float), np.array(d_coords, dtype=int), np.array(d_vecs, dtype=np.float32), np.array(d_ids, dtype=np.int32)
+
+        # Handle empty graphs to prevent vstack errors
+        if not props:
+            return (np.array([], dtype=float), np.array([], dtype=int), 
+                    np.array([], dtype=np.float32), np.array([], dtype=np.int32))
+
+        # Stack the collected batch arrays into final outputs
+        return (np.array(props, dtype=float), 
+                np.vstack(d_coords).astype(int), 
+                np.vstack(d_vecs).astype(np.float32), 
+                np.concatenate(d_ids).astype(np.int32))
 
     def _map_direction_to_material_voxels(self, image, d_coords, d_vecs, d_ids):
         mat_coords = np.column_stack(np.where(image > 0))

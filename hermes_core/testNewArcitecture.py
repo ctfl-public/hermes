@@ -75,16 +75,69 @@ def create_synthetic_fibers(size=60, num_fibers=15, fiber_radius=5):
     
     return matrix
 
+from scipy.ndimage import distance_transform_edt
+
+def create_synthetic_bending_fibers(size=60, num_fibers=10, fiber_radius=5):
+    """Creates a 3D matrix with curved, bending fibers using Bezier curves and EDT."""
+    print(f"Generating synthetic 3D bending fiber data ({num_fibers} fibers)...")
+    
+    # Initialize a boolean array where True = background, False = fiber skeleton
+    # (EDT calculates the distance to the nearest False value)
+    skeleton_volume = np.ones((size, size, size), dtype=bool)
+    
+    for _ in range(num_fibers):
+        # 1. Generate 4 random 3D control points for the Bezier curve
+        # Scaling by size*1.5 and shifting slightly allows fibers to start/end outside the box
+        p0 = (np.random.rand(3) * size * 1.5) - (size * 0.25)
+        p1 = (np.random.rand(3) * size * 1.5) - (size * 0.25)
+        p2 = (np.random.rand(3) * size * 1.5) - (size * 0.25)
+        p3 = (np.random.rand(3) * size * 1.5) - (size * 0.25)
+        
+        # 2. Evaluate the curve at N points (ensuring continuous voxel lines)
+        t = np.linspace(0, 1, num=size * 4)[:, np.newaxis]
+        
+        # 3. Apply the cubic Bezier equation
+        curve = ((1-t)**3)*p0 + 3*((1-t)**2)*t*p1 + 3*(1-t)*(t**2)*p2 + (t**3)*p3
+        
+        # 4. Convert spatial curve coordinates to integer voxel indices
+        coords = np.round(curve).astype(int)
+        
+        # 5. Filter out coordinates that fall outside our bounding box
+        valid = (coords[:, 0] >= 0) & (coords[:, 0] < size) & \
+                (coords[:, 1] >= 0) & (coords[:, 1] < size) & \
+                (coords[:, 2] >= 0) & (coords[:, 2] < size)
+        coords = coords[valid]
+        
+        # 6. Burn the valid skeleton points into the volume
+        if len(coords) > 0:
+            skeleton_volume[coords[:, 0], coords[:, 1], coords[:, 2]] = False
+            
+    # 7. Calculate distance from every voxel to the nearest skeleton voxel
+    distance_map = distance_transform_edt(skeleton_volume)
+    
+    # 8. Create the greyscale matrix
+    matrix = np.full((size, size, size), 50, dtype=np.uint16)
+    
+    # 9. Thicken the skeletons into solid fibers
+    mask = distance_map <= fiber_radius
+    matrix[mask] = 200
+    
+    # 10. Add random noise for realism
+    noise = np.random.randint(-20, 20, (size, size, size), dtype=np.int16)
+    matrix = np.clip(matrix + noise, 0, 255).astype(np.uint16)
+    
+    return matrix
+
 def main():
     # ==========================================================
     # 1. INITIALIZATION & DATA LOADING
     # ==========================================================
-    print("\n--- Testing Initialization ---")
-    dummy_data = create_synthetic_fibers(size=50, num_fibers=3)
+    # print("\n--- Testing Initialization ---")
+    # dummy_data = create_synthetic_bending_fibers(size=50, num_fibers=1)
     
     # Initialize workspace with the dummy data
-    ws = Workspace(matrix=dummy_data, voxel_size=1, name="Test_Sphere")
-    # ws = Workspace.from_file(r'/beegfs/users/lchacon/Projects/HERMES/Git/hermes/grid_physical_15Elevation_1.0.tif', voxel_size=1)
+    # ws = Workspace(matrix=dummy_data, voxel_size=1, name="exampleMatrix")
+    ws = Workspace.from_file(r'/beegfs/users/lchacon/Projects/HERMES/Git/hermes/grid_physical_15Elevation_1.0.tif', voxel_size=1)
     print(f"Created Workspace: {ws.name} | Shape: {ws.matrix.shape} | Voxel Size: {ws.voxel_size}")
 
     # ==========================================================
@@ -127,8 +180,7 @@ def main():
     # ==========================================================
     print("\n--- Testing Property Quantification ---")
     # Run the full analytics suite
-    # (Using smaller sphere sizes since our matrix is only 44x44x44 after padding)
-    props = ws.compute_all_properties(fiber_sphere=10, pore_sphere=30, plane='XY')
+    props = ws.compute_all_properties(fiber_sphere=10, pore_sphere=30, plane='XY', step_size=7)
     
     print("Computed Properties:")
     for key, value in props.items():
