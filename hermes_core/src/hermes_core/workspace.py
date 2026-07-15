@@ -13,7 +13,7 @@ import pyvista as pv
 from pathlib import Path
 
 class Workspace:
-    def __init__(self, matrix=None, voxel_size=1e-6, name="Workspace", origin=(0,0,0)):
+    def __init__(self, matrix=None, voxel_size=1e-6, name="Workspace", origin=(0,0,0), direction_map=None):
         """
         Workspace class holding the domain as a numpy matrix.
         
@@ -44,7 +44,7 @@ class Workspace:
         # Placeholders for generated geometrical data
         self.vertices = None
         self.faces = None
-        self.direction_map = None
+        self.direction_map = direction_map
         self.properties = {}
 
     @classmethod
@@ -92,8 +92,8 @@ class Workspace:
         
         # 2. Auto-detect voxel size if not explicitly provided
         if voxel_size is None:
-            # Measure the physical bounding box of the very first cell
-            cb = mesh.cell_bounds(0)
+            # Extract the first cell and measure its physical bounding box
+            cb = mesh.get_cell(0).bounds
             voxel_size = np.array([cb[1]-cb[0], cb[3]-cb[2], cb[5]-cb[4]], dtype=float)
             print(f"Auto-detected voxel size from VTU: {voxel_size}")
         elif isinstance(voxel_size, (int, float)):
@@ -119,10 +119,23 @@ class Workspace:
         # 6. Populate the matrix with the scalar values from the VTU
         matrix[indices[:, 0], indices[:, 1], indices[:, 2]] = scalars.astype(np.uint16)
         
+        # 7. Extract the orientation map if it exists
+        direction_map = None
+        if "Orientation" in mesh.cell_data:
+            vec_data = mesh.cell_data["Orientation"]
+            
+            # Create a 4D array formatted as [X, Y, Z, 3]
+            vector_shape = tuple(shape) + (vec_data.shape[1],)
+            direction_map = np.zeros(vector_shape, dtype=vec_data.dtype)
+            
+            # Map the N x 3 vectors back into the 3D grid layout
+            direction_map[indices[:, 0], indices[:, 1], indices[:, 2], :] = vec_data
+            print("Successfully loaded 'Orientation' map from VTU.")
+
         # Clean up the name for the workspace
         name = filepath.split('/')[-1].split('\\')[-1]
         
-        return cls(matrix=matrix, voxel_size=voxel_size, name=name)
+        return cls(matrix=matrix, voxel_size=voxel_size, name=name, direction_map=direction_map)
 
     # =========================================================================
     # Sampling module
