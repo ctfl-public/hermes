@@ -11,6 +11,7 @@ from skimage.feature import peak_local_max
 from scipy.spatial import cKDTree
 import pyvista as pv
 from pathlib import Path
+import re
 
 class Workspace:
     def __init__(self, matrix=None, voxel_size=1e-6, name="Workspace", origin=(0,0,0), direction_map=None):
@@ -137,6 +138,59 @@ class Workspace:
         
         return cls(matrix=matrix, voxel_size=voxel_size, name=name, direction_map=direction_map)
 
+    @classmethod
+    def from_image_sequence(cls, dir_path, pattern="*.tif", voxel_size=1e-6, name=None):
+        """
+        Generates a Workspace by loading a sequence of 2D TIFF files from a directory.
+        Assumes files are organized sequentially (e.g., nameOfFile_0001.tif).
+        
+        :param dir_path: Path to the directory containing the images.
+        :param pattern: File matching pattern (default is '*.tif').
+        :param voxel_size: Physical size of a single voxel.
+        :param name: Optional. If None, uses the directory name.
+        """
+        
+        dir_path = Path(dir_path)
+        if not dir_path.is_dir():
+            raise NotADirectoryError(f"The path {dir_path} is not a valid directory.")
+            
+        # 1. Gather all matching files
+        # Also handles .tiff extensions safely if the pattern is just *.tif
+        files = list(dir_path.glob(pattern))
+        if not files:
+            # Fallback check just in case they used .tiff instead of .tif
+            files = list(dir_path.glob("*.tiff"))
+            if not files:
+                raise FileNotFoundError(f"No files matching '{pattern}' found in {dir_path}")
+
+        # 2. Sort files naturally based on trailing numerical values
+        # This ensures name_2.tif comes BEFORE name_10.tif
+        def extract_number(filepath):
+            match = re.search(r'_(\d+)\.tiff?$', filepath.name, re.IGNORECASE)
+            return int(match.group(1)) if match else filepath.name
+
+        try:
+            files.sort(key=extract_number)
+        except TypeError:
+            # Fallback to standard alphabetical sort if the regex fails to find numbers
+            files.sort()
+
+        print(f"Loading {len(files)} images from {dir_path}...")
+
+        # 3. Read images into a list
+        images = [imageio.imread(f) for f in files]
+        
+        # 4. Stack 2D arrays into a 3D volume
+        # axis=-1 stacks them along the Z-axis (resulting in X, Y, Z shape)
+        # Assuming the 2D images are read as (X, Y)
+        image_volume = np.stack(images, axis=-1)
+        
+        # 5. Clean up name
+        if name is None:
+            name = dir_path.name
+            
+        return cls(matrix=image_volume, voxel_size=voxel_size, name=name)
+    
     # =========================================================================
     # Sampling module
     # =========================================================================
@@ -261,7 +315,7 @@ class Workspace:
         """
         Applies requested smoothing filters to a provided trimesh object.
         
-        :param smoothing_params: Dictionary containing filter options.
+        :param smoothing_params: Dictionary containing filter options {'laplacian': 2}, {'ScreenPoisson':7}.
         :return: Smoothed trimesh object.
         """
         if not smoothing_params:
@@ -296,6 +350,9 @@ class Workspace:
             self.faces = mesh.face_matrix() 
 
             mesh = trimesh.Trimesh(vertices=self.vertices, faces=self.faces)
+        
+        else:
+            print('Filter not recognized.')
 
         return mesh
     
@@ -367,6 +424,71 @@ class Workspace:
         # Save array container state in place back to the grid domain
         self.matrix = mask.astype(np.uint16)
 
+    # =========================================================================
+    # IMAGE FILTERING MODULE
+    # =========================================================================
+
+    def apply_image_filter(self, method, **kwargs):
+        """
+        Applies 3D image processing filters to the internal matrix in-place.
+        Useful for noise reduction, smoothing, and contrast enhancement prior to segmentation.
+        
+        :param method: "Median", "Gaussian", "Equalize", or "Rescale".
+        :param kwargs: Optional parameters like 'size' (Median) or 'sigma' (Gaussian).
+        """
+        method = method.strip().capitalize()
+        
+        # 1. Noise Reduction & Smoothing
+        if method == "Median":
+            # Excellent for removing salt-and-pepper noise while preserving sharp boundaries
+            from scipy.ndimage import median_filter
+            size = kwargs.get('size', 3)
+            print(f"Applying 3D Median filter (size={size})...")
+            self.matrix = median_filter(self.matrix, size=size)
+            
+        elif method == "Gaussian":
+            # Standard low-pass filter for general volumetric smoothing
+            from scipy.ndimage import gaussian_filter
+            sigma = kwargs.get('sigma', 1.0)
+            orig_dtype = self.matrix.dtype
+            print(f"Applying 3D Gaussian filter (sigma={sigma})...")
+            
+            # Gaussian filter scales to float; cast back to original dtype to protect memory
+            smoothed = gaussian_filter(self.matrix.astype(float), sigma=sigma)
+            self.matrix = smoothed.astype(orig_dtype)
+
+        # 2. Contrast Enhancement
+        elif method == "Equalize":
+            # Global histogram equalization to boost contrast across the whole volume
+            from skimage import exposure
+            orig_dtype = self.matrix.dtype
+            print("Applying Histogram Equalization...")
+            
+            # Equalize returns a float64 array scaled from 0.0 to 1.0
+            equalized = exposure.equalize_hist(self.matrix)
+            
+            # Safely scale it back to the original integer range (e.g., 0-65535 for uint16)
+            if np.issubdtype(orig_dtype, np.integer):
+                max_val = np.iinfo(orig_dtype).max
+                self.matrix = (equalized * max_val).astype(orig_dtype)
+            else:
+                self.matrix = equalized.astype(orig_dtype)
+                
+        elif method == "Rescale":
+            # Stretches the intensity histogram to fill the maximum possible data range
+            from skimage import exposure
+            in_range = kwargs.get('in_range', 'image')
+            out_range = kwargs.get('out_range', 'dtype')
+            print(f"Applying Intensity Rescaling (in_range={in_range}, out_range={out_range})...")
+            
+            self.matrix = exposure.rescale_intensity(self.matrix, in_range=in_range, out_range=out_range)
+            
+        else:
+            raise ValueError(f"Unknown filter method: {method}. Choose 'Median', 'Gaussian', 'Equalize', or 'Rescale'.")
+            
+        # CRITICAL: Clear the geometry cache since the underlying voxel values have changed
+        self.vertices = None
+        self.faces = None
     # =========================================================================
     # PROPERTIES QUANTIFICATION MODULES
     # =========================================================================
@@ -908,4 +1030,108 @@ class Workspace:
         ax.set_title(f"Workspace: {self.name} | Cutoff: {vmin} - {vmax}")
         
         # This will perfectly pipe to your VS Code Interactive Window!
+        plt.show()
+    
+    def visualize_standalone_dashboard(self, cmap='gray'):
+        """
+        A standalone Python dashboard for 3D matrix visualization using pure Matplotlib.
+        Allows real-time switching of both the slice and the viewing axis.
+        Automatically resets to the center slice when changing axes.
+        """
+        import matplotlib.pyplot as plt
+        from matplotlib.widgets import Slider, RadioButtons
+
+        # 1. Setup the figure and strict layout zones
+        fig = plt.figure(figsize=(10, 8))
+        
+        ax_main = fig.add_axes([0.25, 0.15, 0.7, 0.75])     # Main display
+        ax_slider = fig.add_axes([0.25, 0.05, 0.7, 0.03])   # Slider at the bottom
+        ax_radio = fig.add_axes([0.05, 0.7, 0.1, 0.15])     # Radio buttons on the left
+
+        # 2. Application state tracker
+        state = {
+            'axis_label': 'Z',
+            'axis_idx': 2,
+            'image': None,
+            'title': None
+        }
+
+        # 3. Initialize UI elements
+        radio = RadioButtons(ax_radio, ('X', 'Y', 'Z'), active=2)
+        
+        max_slice = self.matrix.shape[2] - 1
+        initial_slice = max_slice // 2
+        slider = Slider(ax_slider, 'Slice', 0, max_slice, valinit=initial_slice, valstep=1)
+
+        # 4. Define UI Update Logic
+        def render_full_axis():
+            """Fully clears and redraws the main axis when changing X/Y/Z."""
+            ax_idx = state['axis_idx']
+            axis_val = state['axis_label']
+            
+            # Update slider bounds dynamically
+            new_max = self.matrix.shape[ax_idx] - 1
+            slider.valmax = new_max
+            slider.ax.set_xlim(0, new_max) 
+            
+            # CRITICAL UPDATE: Force slider to the exact center of the new axis
+            center_idx = new_max // 2
+            
+            # Temporarily disable slider events to prevent a double-render crash
+            slider.eventson = False 
+            slider.set_val(center_idx)
+            slider.eventson = True
+            
+            idx = center_idx
+            
+            # Calculate physical aspect ratio
+            if axis_val == 'X': aspect = self.voxel_size[2] / self.voxel_size[1]
+            elif axis_val == 'Y': aspect = self.voxel_size[2] / self.voxel_size[0]
+            else: aspect = self.voxel_size[1] / self.voxel_size[0]
+
+            # Extract new center slice
+            if ax_idx == 0: data = self.matrix[idx, :, :]
+            elif ax_idx == 1: data = self.matrix[:, idx, :]
+            else: data = self.matrix[:, :, idx]
+
+            # Redraw image
+            ax_main.clear()
+            state['image'] = ax_main.imshow(data, cmap=cmap, aspect=aspect, interpolation='nearest')
+            state['title'] = ax_main.set_title(f"Workspace: {self.name} | Axis: {axis_val} | Slice: {idx}")
+            fig.canvas.draw_idle()
+
+        def update_slice(val):
+            """Fast memory update when sliding."""
+            if state['image'] is None: return
+            
+            idx = int(slider.val)
+            ax_idx = state['axis_idx']
+            
+            # Extract slice
+            if ax_idx == 0: new_data = self.matrix[idx, :, :]
+            elif ax_idx == 1: new_data = self.matrix[:, idx, :]
+            else: new_data = self.matrix[:, :, idx]
+            
+            # Fast swap
+            state['image'].set_data(new_data)
+            state['title'].set_text(f"Workspace: {self.name} | Axis: {state['axis_label']} | Slice: {idx}")
+            fig.canvas.draw_idle()
+
+        def update_axis(label):
+            """Triggered by the RadioButtons to change the axis."""
+            state['axis_label'] = label
+            axis_map = {'X': 0, 'Y': 1, 'Z': 2}
+            state['axis_idx'] = axis_map[label]
+            render_full_axis()
+
+        # 5. Connect events to logic
+        slider.on_changed(update_slice)
+        radio.on_clicked(update_axis)
+
+        # 6. Garbage Collection Safety
+        fig._slider_ref = slider
+        fig._radio_ref = radio
+
+        # 7. Render initial state and launch window
+        render_full_axis()
         plt.show()
