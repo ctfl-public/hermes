@@ -19,6 +19,8 @@ It supports interactive use through a PyQt GUI, scripted serial execution throug
 
 For a complete feature-by-feature reference, see [docs/features.md](docs/features.md).
 
+HERMES is developed by the Computational Thermophysics and Fluids Laboratory (CTFL). Follow the lab's research at [https://ctfl.engr.uky.edu/](https://ctfl.engr.uky.edu/).
+
 ## License
 
 This software is intended to be released under the MIT License.
