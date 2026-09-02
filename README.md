@@ -191,6 +191,6 @@ The bibliographic entry below is a draft and should be updated with the final DO
   author  = {Chacon, Luis A. and Banerjee, Ayan and Stoffel, Tyler D. and Poovathingal, Savio J.},
   journal = {Computational Materials Science},
   year    = {2026},
-  note    = {Manuscript in preparation}
+  note    = {In press}
 }
 ```
