@@ -180,17 +180,18 @@ See [docs/testing.md](docs/testing.md) and [docs/TEST_CATALOG.md](docs/TEST_CATA
 
 ## Citing HERMES
 
-<!-- TODO: Confirm the final journal target, DOI, repository URL, and publication status before the first public push. -->
-
 Please cite the HERMES article when using this repository in published work.
-The bibliographic entry below is a draft and should be updated with the final DOI and publication metadata.
+The published article is available at [https://doi.org/10.1016/j.commatsci.2026.115036](https://doi.org/10.1016/j.commatsci.2026.115036).
 
 ```bibtex
 @article{chacon2026hermes,
   title   = {A computational framework for automated microstructure volume generation and property extraction from x-ray computed tomography (XRCT) data},
   author  = {Chacon, Luis A. and Banerjee, Ayan and Stoffel, Tyler D. and Poovathingal, Savio J.},
   journal = {Computational Materials Science},
+  volume  = {275},
+  pages   = {115036},
   year    = {2026},
-  note    = {In press}
+  doi     = {10.1016/j.commatsci.2026.115036},
+  url     = {https://doi.org/10.1016/j.commatsci.2026.115036}
 }
 ```
